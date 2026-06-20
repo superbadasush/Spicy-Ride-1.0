@@ -340,10 +340,12 @@ const player = {
     crumpled: false,
     spice: 100,
     coinScore: 0,
+    distanceScore: 0,
     shirtColor: '#3355CC',
     pepperTimer: 0,
     lives: 3,
     respawnTimer: 0,
+    invincibleTimer: 0,
 };
 
 const player2 = {
@@ -358,10 +360,12 @@ const player2 = {
     crumpled: false,
     spice: 100,
     coinScore: 0,
+    distanceScore: 0,
     shirtColor: '#CC3333',
     pepperTimer: 0,
     lives: 3,
     respawnTimer: 0,
+    invincibleTimer: 0,
 };
 
 function resetPlayerObj(pl, shirtColor, startX) {
@@ -374,10 +378,12 @@ function resetPlayerObj(pl, shirtColor, startX) {
     pl.crumpled = false;
     pl.spice = 100;
     pl.coinScore = 0;
+    pl.distanceScore = 0;
     pl.shirtColor = shirtColor;
     pl.pepperTimer = 0;
     pl.lives = 3;
     pl.respawnTimer = 0;
+    pl.invincibleTimer = 0;
 }
 
 function respawnPlayerObj(pl) {
@@ -390,6 +396,7 @@ function respawnPlayerObj(pl) {
     pl.pepperTimer = 0;
     pl.spice = 100;
     pl.respawnTimer = 0;
+    pl.invincibleTimer = 60;
 }
 
 function resetPlayer() {
@@ -399,6 +406,7 @@ function resetPlayer() {
 
 function updatePlayer(pl, isThrust) {
     if (!pl.alive) return;
+    if (pl.invincibleTimer > 0) pl.invincibleTimer--;
     const canThrust = isThrust && pl.spice > 0;
     if (canThrust) {
         pl.vy += THRUST;
@@ -441,6 +449,9 @@ function updatePlayer(pl, isThrust) {
 
 function drawCharacter(pl, isThrust, introState) {
     ctx.save();
+    if (pl.invincibleTimer > 0 && Math.floor(pl.invincibleTimer / 5) % 2 === 0) {
+        ctx.globalAlpha = 0.3;
+    }
     const cx = pl.x + pl.width / 2;
     const bodyTop = pl.y;
     const bodyH = pl.height * 0.55;
@@ -1660,6 +1671,7 @@ function drawPepperAura(pl) {
 function checkPlayerCollisions(pl) {
     if (!pl.alive) return;
     if (pl.pepperTimer > 0) return;
+    if (pl.invincibleTimer > 0) return;
     const px = pl.x + 6;
     const py = pl.y + 6;
     const pw = pl.width - 12;
@@ -1727,7 +1739,7 @@ function drawHUD(pl, keyHint, xOff, hw) {
     ctx.fillStyle = '#FFAA00';
     ctx.font = 'bold 14px Arial';
     ctx.textAlign = 'left';
-    ctx.fillText(`Dist: ${distanceScore}m`, xOff + 16, 28);
+    ctx.fillText(`Dist: ${pl.distanceScore}m`, xOff + 16, 28);
     ctx.fillStyle = '#FFD700';
     ctx.fillText(`Coins: ${pl.coinScore}`, xOff + 16, 48);
     // life hearts
@@ -1838,13 +1850,13 @@ function drawGameOver() {
         ctx.font = 'bold 18px Arial';
         ctx.fillText('TOO SPICY FOR YOU!', CANVAS_W / 2, 128);
 
-        const p1Total = distanceScore + player.coinScore * 5;
+        const p1Total = player.distanceScore + player.coinScore * 5;
         ctx.fillStyle = player.shirtColor;
         ctx.font = 'bold 20px Arial';
         ctx.fillText('YOUR SCORE', CANVAS_W / 2, 195);
         ctx.fillStyle = 'white';
         ctx.font = '17px Arial';
-        ctx.fillText(`Distance: ${distanceScore}m`, CANVAS_W / 2, 228);
+        ctx.fillText(`Distance: ${player.distanceScore}m`, CANVAS_W / 2, 228);
         ctx.fillText(`Coins: ${player.coinScore}  (+${player.coinScore * 5}pts)`, CANVAS_W / 2, 256);
         ctx.fillStyle = '#FFD700';
         ctx.font = 'bold 22px Arial';
@@ -1854,25 +1866,25 @@ function drawGameOver() {
         ctx.font = 'bold 18px Arial';
         ctx.fillText('TOO SPICY FOR BOTH OF YOU!', CANVAS_W / 2, 128);
 
-        const p1Total = distanceScore + player.coinScore * 5;
+        const p1Total = player.distanceScore + player.coinScore * 5;
         ctx.fillStyle = player.shirtColor;
         ctx.font = 'bold 20px Arial';
         ctx.fillText('PLAYER 1', CANVAS_W / 4, 185);
         ctx.fillStyle = 'white';
         ctx.font = '16px Arial';
-        ctx.fillText(`Dist: ${distanceScore}m`, CANVAS_W / 4, 215);
+        ctx.fillText(`Dist: ${player.distanceScore}m`, CANVAS_W / 4, 215);
         ctx.fillText(`Coins: ${player.coinScore} (+${player.coinScore * 5}pts)`, CANVAS_W / 4, 238);
         ctx.fillStyle = '#FFD700';
         ctx.font = 'bold 18px Arial';
         ctx.fillText(`Score: ${p1Total}`, CANVAS_W / 4, 266);
 
-        const p2Total = distanceScore + player2.coinScore * 5;
+        const p2Total = player2.distanceScore + player2.coinScore * 5;
         ctx.fillStyle = player2.shirtColor;
         ctx.font = 'bold 20px Arial';
         ctx.fillText('PLAYER 2', (CANVAS_W * 3) / 4, 185);
         ctx.fillStyle = 'white';
         ctx.font = '16px Arial';
-        ctx.fillText(`Dist: ${distanceScore}m`, (CANVAS_W * 3) / 4, 215);
+        ctx.fillText(`Dist: ${player2.distanceScore}m`, (CANVAS_W * 3) / 4, 215);
         ctx.fillText(`Coins: ${player2.coinScore} (+${player2.coinScore * 5}pts)`, (CANVAS_W * 3) / 4, 238);
         ctx.fillStyle = '#FFD700';
         ctx.font = 'bold 18px Arial';
@@ -2453,6 +2465,8 @@ function loop() {
         scrollOffset += scrollSpeed;
         scrollSpeed += 0.0015;
         distanceScore = Math.floor(scrollOffset / 60);
+        if (player.lives > 0) player.distanceScore = distanceScore;
+        if (playerCount === 2 && player2.lives > 0) player2.distanceScore = distanceScore;
 
         updatePlayer(player, p1Thrusting);
         if (playerCount === 2) updatePlayer(player2, p2Thrusting);
