@@ -19,19 +19,22 @@ bgMusic.loop = true;
 bgMusic.volume = 0.35;
 
 let musicStatus = 'loading'; // 'loading' | 'blocked' | 'playing' | 'error'
+let musicStartPending = false;
 
 bgMusic.addEventListener('error', () => { musicStatus = 'error'; });
 bgMusic.addEventListener('canplaythrough', () => {
     if (musicStatus === 'loading') {
         musicStatus = 'blocked';
-        tryStartMusic();
+        if (musicStartPending) tryStartMusic();
     }
 });
 
 function tryStartMusic() {
-    if (musicStatus === 'playing' || musicStatus === 'error' || musicStatus === 'loading') return;
+    if (musicStatus === 'playing' || musicStatus === 'error') return;
+    if (musicStatus === 'loading') { musicStartPending = true; return; }
     bgMusic.play().then(() => {
         musicStatus = 'playing';
+        musicStartPending = false;
     }).catch(() => {
         musicStatus = 'blocked';
     });
@@ -2068,6 +2071,7 @@ function drawIntro() {
 
 // ─── Game Management ──────────────────────────────────────────────────────────
 function startGame() {
+    tryStartMusic();
     gameState = STATE.PLAYING;
     resetPlayer();
     obstacles.length = 0;
