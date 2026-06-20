@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(tree \"c:\\\\Users\\\\lenovo\\\\Desktop\\\\spicy ride. beta\" /a)"
+    ]
+  }
+}
