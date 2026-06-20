@@ -341,6 +341,7 @@ const player = {
     spice: 100,
     coinScore: 0,
     distanceScore: 0,
+    permanentlyDead: false,
     shirtColor: '#3355CC',
     pepperTimer: 0,
     lives: 3,
@@ -361,6 +362,7 @@ const player2 = {
     spice: 100,
     coinScore: 0,
     distanceScore: 0,
+    permanentlyDead: false,
     shirtColor: '#CC3333',
     pepperTimer: 0,
     lives: 3,
@@ -379,6 +381,7 @@ function resetPlayerObj(pl, shirtColor, startX) {
     pl.spice = 100;
     pl.coinScore = 0;
     pl.distanceScore = 0;
+    pl.permanentlyDead = false;
     pl.shirtColor = shirtColor;
     pl.pepperTimer = 0;
     pl.lives = 3;
@@ -1716,6 +1719,7 @@ function killPlayerObj(pl) {
     pl.vy = 8;
     playDeathSound();
 
+    if (pl.lives <= 0) pl.permanentlyDead = true;
     const p1Done = player.lives <= 0;
     const p2Done = playerCount === 1 || player2.lives <= 0;
     if (p1Done && p2Done) {
@@ -2465,8 +2469,8 @@ function loop() {
         scrollOffset += scrollSpeed;
         scrollSpeed += 0.0015;
         distanceScore = Math.floor(scrollOffset / 60);
-        if (player.lives > 0) player.distanceScore = distanceScore;
-        if (playerCount === 2 && player2.lives > 0) player2.distanceScore = distanceScore;
+        if (!player.permanentlyDead) player.distanceScore = distanceScore;
+        if (playerCount === 2 && !player2.permanentlyDead) player2.distanceScore = distanceScore;
 
         updatePlayer(player, p1Thrusting);
         if (playerCount === 2) updatePlayer(player2, p2Thrusting);
