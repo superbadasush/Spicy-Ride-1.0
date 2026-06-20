@@ -4,6 +4,8 @@ A fast-paced dodging game built with vanilla HTML, CSS, and JavaScript.
 
 ## Project Structure
 
+-
+
 ```
 spicy ride. beta/
 ├── index.html          # Main game HTML file
