@@ -1,5 +1,10 @@
 # Spicy Ride — Feature Ideas
 
+## 0. Controls
+
+In 1-player mode you can fly with **W**, **↑ (arrow up)** or **SPACE** — whichever
+feels best. In 2-player mode P1 uses W and P2 uses ↑.
+
 ## 1. Campaign Mode (10 Levels)
 
 A level is beaten by surviving until the timer runs out. Each level lasts as many
@@ -57,22 +62,22 @@ Chosen before starting a level:
   and fly endlessly there.
 - Keeps the current distance + coins scoring (and the 2-player mode).
 
-## 5. Shop & Outfits
+## 5. Shop & Armour
 
-Coins collected in any mode are saved and can be spent in a shop:
+Coins collected in any mode are saved and can be spent in a shop. The gear is
+**armour**, not clothes — equipping a set puts a helmet, chestplate and shoulder
+pads on the character in the set's colour:
 
-| Outfit | Price |
+| Armour | Price |
 |--------|-------|
-| Lava outfit | 500 coins |
-| Snow outfit | 1,000 coins |
-| Gold outfit | 2,000 coins |
+| Lava armour | 500 coins |
+| Snow armour | 1,000 coins |
+| Gold armour | 2,000 coins |
 
-- Outfits change the character's shirt/skin colors (the code already supports a
-  `shirtColor` per player, so an outfit can start as a color/palette swap).
-- *Suggestion:* outfits could later add cosmetic particle effects (lava drips,
+- *Suggestion:* armour could later add cosmetic particle effects (lava drips,
   snowflakes, golden sparkle trail). In 2-player mode each player picks their own
-  outfit.
-- Coins and owned outfits need to be saved between sessions (`localStorage`).
+  set.
+- Coins and owned armour need to be saved between sessions (`localStorage`).
 
 ## 6. Admin / Test Mode
 

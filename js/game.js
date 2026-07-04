@@ -125,16 +125,20 @@ const DIFFICULTIES = [
 ];
 let difficultyIdx = 1;
 
-// ─── Outfits (shop) ───────────────────────────────────────────────────────────
+// ─── Armour (shop) ────────────────────────────────────────────────────────────
+// Non-classic gear renders as real armour on the character: helmet, chestplate
+// and shoulder pads in the set's colour.
 const OUTFITS = [
-    { id: 'classic', name: 'CLASSIC OUTFIT', price: 0,    shirt: '#3355CC' },
-    { id: 'lava',    name: 'LAVA OUTFIT',    price: 500,  shirt: '#FF4400' },
-    { id: 'snow',    name: 'SNOW OUTFIT',    price: 1000, shirt: '#DDEEFF' },
-    { id: 'gold',    name: 'GOLD OUTFIT',    price: 2000, shirt: '#FFD700' },
+    { id: 'classic', name: 'CLASSIC GEAR', price: 0,    shirt: '#3355CC', armor: false },
+    { id: 'lava',    name: 'LAVA ARMOUR', price: 500,  shirt: '#FF4400', armor: true },
+    { id: 'snow',    name: 'SNOW ARMOUR', price: 1000, shirt: '#DDEEFF', armor: true },
+    { id: 'gold',    name: 'GOLD ARMOUR', price: 2000, shirt: '#FFD700', armor: true },
 ];
+function equippedOutfit() {
+    return OUTFITS.find(o => o.id === saveData.equipped) || OUTFITS[0];
+}
 function equippedShirt() {
-    const o = OUTFITS.find(o => o.id === saveData.equipped);
-    return o ? o.shirt : '#3355CC';
+    return equippedOutfit().shirt;
 }
 
 // ─── Level Themes ─────────────────────────────────────────────────────────────
@@ -200,6 +204,12 @@ let adminMode = false;
 // ─── Input ────────────────────────────────────────────────────────────────────
 let p1Thrusting = false;
 let p2Thrusting = false;
+const p1Keys = new Set(); // thrust keys currently held (supports several at once)
+
+// P1 flies with W always; in 1-player mode ↑ and SPACE work too
+function isP1ThrustKey(code) {
+    return code === 'KeyW' || (playerCount === 1 && (code === 'ArrowUp' || code === 'Space'));
+}
 
 function updateFireSound() {
     if ((p1Thrusting && player.alive) ||
@@ -242,10 +252,15 @@ window.addEventListener('keydown', e => {
         }
         return;
     }
+    if (gameState === STATE.PLAYING && isP1ThrustKey(e.code)) {
+        e.preventDefault();
+        p1Keys.add(e.code);
+        p1Thrusting = true;
+        updateFireSound();
+    }
     if (e.code === 'KeyW') {
         e.preventDefault();
         if (gameState === STATE.INTRO) startGame();
-        if (gameState === STATE.PLAYING) { p1Thrusting = true; updateFireSound(); }
         if (gameState === STATE.DEAD && deadTimer > 90) resetGame();
     }
     if (e.code === 'ArrowUp') {
@@ -276,7 +291,7 @@ window.addEventListener('keydown', e => {
     }
 });
 window.addEventListener('keyup', e => {
-    if (e.code === 'KeyW') { p1Thrusting = false; updateFireSound(); }
+    if (p1Keys.delete(e.code) && p1Keys.size === 0) { p1Thrusting = false; updateFireSound(); }
     if (e.code === 'ArrowUp') { p2Thrusting = false; updateFireSound(); }
 });
 function canvasCoords(clientX, clientY) {
@@ -464,6 +479,7 @@ const player = {
     maxLives: 3,
     respawnTimer: 0,
     invincibleTimer: 0,
+    armor: null,
 };
 
 const player2 = {
@@ -486,6 +502,7 @@ const player2 = {
     maxLives: 3,
     respawnTimer: 0,
     invincibleTimer: 0,
+    armor: null,
 };
 
 function resetPlayerObj(pl, shirtColor, startX) {
@@ -522,8 +539,11 @@ function respawnPlayerObj(pl) {
 }
 
 function resetPlayer() {
-    resetPlayerObj(player, equippedShirt(), PLAYER_X);
+    const outfit = equippedOutfit();
+    resetPlayerObj(player, outfit.shirt, PLAYER_X);
     resetPlayerObj(player2, '#CC3333', PLAYER_X);
+    player.armor = outfit.armor ? outfit.shirt : null;
+    player2.armor = null;
 }
 
 function updatePlayer(pl, isThrust) {
@@ -603,6 +623,37 @@ function drawCharacter(pl, isThrust, introState) {
     roundRect(ctx, pl.x + 4, bodyTop + headR + bodyH * 0.3, pl.width - 8, bodyH * 0.55, 5);
     ctx.fill();
 
+    // armour chestplate over the suit
+    if (pl.armor) {
+        const ay = bodyTop + headR + bodyH * 0.26;
+        const ah = bodyH * 0.62;
+        ctx.fillStyle = pl.armor;
+        roundRect(ctx, pl.x + 2, ay, pl.width - 4, ah, 6);
+        ctx.fill();
+        // metallic sheen
+        const ag = ctx.createLinearGradient(pl.x + 2, ay, pl.x + pl.width - 2, ay);
+        ag.addColorStop(0, 'rgba(0,0,0,0.30)');
+        ag.addColorStop(0.35, 'rgba(255,255,255,0.30)');
+        ag.addColorStop(1, 'rgba(0,0,0,0.30)');
+        ctx.fillStyle = ag;
+        roundRect(ctx, pl.x + 2, ay, pl.width - 4, ah, 6);
+        ctx.fill();
+        // centre ridge + rivets
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(cx, ay + 3);
+        ctx.lineTo(cx, ay + ah - 3);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        for (const [rx, ry] of [[pl.x + 7, ay + 6], [pl.x + pl.width - 7, ay + 6],
+                                [pl.x + 7, ay + ah - 6], [pl.x + pl.width - 7, ay + ah - 6]]) {
+            ctx.beginPath();
+            ctx.arc(rx, ry, 1.6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
     // legs
     if (!pl.crumpled) {
         const legTop = bodyTop + headR + bodyH - 4;
@@ -669,6 +720,25 @@ function drawCharacter(pl, isThrust, introState) {
     ctx.lineTo(pl.x - 14, bodyTop + headR + 28);
     ctx.stroke();
 
+    // armour shoulder pads
+    if (pl.armor) {
+        ctx.fillStyle = pl.armor;
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+        ctx.lineWidth = 1.2;
+        for (const sx of [pl.x - 1, pl.x + pl.width + 1]) {
+            ctx.beginPath();
+            ctx.arc(sx, bodyTop + headR + 9, 6.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        for (const sx of [pl.x - 1, pl.x + pl.width + 1]) {
+            ctx.beginPath();
+            ctx.arc(sx - 2, bodyTop + headR + 7, 2.2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
     // head
     const hx = cx;
     const hy = bodyTop + headR;
@@ -682,6 +752,31 @@ function drawCharacter(pl, isThrust, introState) {
     ctx.beginPath();
     ctx.arc(hx, hy - 4, headR - 2, Math.PI, 0);
     ctx.fill();
+
+    // armour helmet over the hair
+    if (pl.armor) {
+        ctx.fillStyle = pl.armor;
+        ctx.beginPath();
+        ctx.arc(hx, hy - 1, headR, Math.PI, 0);
+        ctx.fill();
+        // rim
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(hx - headR, hy - 1);
+        ctx.lineTo(hx + headR, hy - 1);
+        ctx.stroke();
+        // shine
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.beginPath();
+        ctx.ellipse(hx - 6, hy - 10, 4.5, 2.5, -0.6, 0, Math.PI * 2);
+        ctx.fill();
+        // crest stud
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.beginPath();
+        ctx.arc(hx, hy - headR + 1, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+    }
 
     // eyes
     if (onFire) {
@@ -1887,6 +1982,7 @@ function drawPepperAura(pl) {
 }
 
 // ─── Boss: Giant Winged Rainbow Fish (level 10) ───────────────────────────────
+const BOSS_SCALE = 1.6; // one knob for the fish's size: drawing, hitbox, mouth
 let boss = null;
 let rainbows = [];
 
@@ -1906,13 +2002,13 @@ function spawnBoss() {
 
 function updateBoss() {
     boss.wingT += 0.15;
-    if (boss.x > CANVAS_W - 150) boss.x -= 2; // entrance glide
+    if (boss.x > CANVAS_W - 175) boss.x -= 2; // entrance glide
 
     // drift toward a living player's height
     const target = player.alive ? player : (playerCount === 2 && player2.alive ? player2 : null);
     const ty = target ? target.y + target.height / 2 : CANVAS_H / 2;
     boss.y += Math.max(-1.4, Math.min(1.4, (ty - boss.y) * 0.02));
-    boss.y = Math.max(95, Math.min(GROUND_Y - 120, boss.y));
+    boss.y = Math.max(125, Math.min(GROUND_Y - 130, boss.y));
 
     if (boss.chargeTimer > 0) {
         boss.chargeTimer--;
@@ -1928,14 +2024,14 @@ function updateBoss() {
     // body contact kills
     for (const pl of activePlayersList()) {
         if (!pl.alive || pl.invincibleTimer > 0 || pl.pepperTimer > 0) continue;
-        if (Math.abs((pl.x + pl.width / 2) - boss.x) < 70 &&
-            Math.abs((pl.y + pl.height / 2) - boss.y) < 50) killPlayerObj(pl);
+        if (Math.abs((pl.x + pl.width / 2) - boss.x) < 70 * BOSS_SCALE &&
+            Math.abs((pl.y + pl.height / 2) - boss.y) < 50 * BOSS_SCALE) killPlayerObj(pl);
     }
 }
 
 function fireRainbow() {
     const target = player.alive ? player : (playerCount === 2 && player2.alive ? player2 : player);
-    const mx = boss.x - 60, my = boss.y + 8;
+    const mx = boss.x - 60 * BOSS_SCALE, my = boss.y + 8 * BOSS_SCALE;
     const base = Math.atan2((target.y + target.height / 2) - my, (target.x + target.width / 2) - mx);
     for (let i = 0; i < 7; i++) {
         const ang = base + (i - 3) * 0.09;
@@ -1988,10 +2084,13 @@ function drawRainbows() {
 
 function drawBoss() {
     if (!boss) return;
-    const bx = boss.x, by = boss.y;
     const flap = Math.sin(boss.wingT) * 0.5;
     const charging = boss.chargeTimer > 0;
     ctx.save();
+    // draw in boss-local coordinates so BOSS_SCALE resizes everything at once
+    ctx.translate(boss.x, boss.y);
+    ctx.scale(BOSS_SCALE, BOSS_SCALE);
+    const bx = 0, by = 0;
 
     // white angel wings
     for (const side of [-1, 1]) {
@@ -2149,7 +2248,7 @@ function killPlayerObj(pl) {
     if (!pl.alive) return;
     pl.alive = false;
     pl.lives--;
-    if (pl === player) p1Thrusting = false;
+    if (pl === player) { p1Thrusting = false; p1Keys.clear(); }
     if (pl === player2) p2Thrusting = false;
     updateFireSound();
     spawnExplosion(pl.x + pl.width / 2, pl.y + pl.height / 2);
@@ -2226,7 +2325,7 @@ function drawHUD(pl, keyHint, xOff, hw) {
     } else {
         ctx.fillStyle = pl.shirtColor;
         ctx.font = 'bold 14px Arial';
-        ctx.fillText(keyHint === 'W' ? 'P1' : 'P2', xOff + hw / 2, 22);
+        ctx.fillText(keyHint.startsWith('W') ? 'P1' : 'P2', xOff + hw / 2, 22);
 
         // spice bar (top-right of this player's half)
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -2522,7 +2621,7 @@ function drawIntro() {
         ctx.font = 'bold 16px Arial';
         if (playerCount === 1) {
             ctx.fillStyle = '#3355CC';
-            ctx.fillText('hold  W  to fly', CANVAS_W / 2, CANVAS_H / 2 + 55);
+            ctx.fillText('hold  W / ↑ / SPACE  to fly', CANVAS_W / 2, CANVAS_H / 2 + 55);
         } else {
             ctx.fillStyle = '#3355CC';
             ctx.fillText('P1: hold  W  to fly', CANVAS_W / 2 - 120, CANVAS_H / 2 + 55);
@@ -2744,8 +2843,9 @@ function completeLevel() {
     victory = currentLevel === 10;
     if (boss) {
         spawnExplosion(boss.x, boss.y);
-        spawnExplosion(boss.x - 45, boss.y + 25);
-        spawnExplosion(boss.x + 35, boss.y - 30);
+        spawnExplosion(boss.x - 45 * BOSS_SCALE, boss.y + 25 * BOSS_SCALE);
+        spawnExplosion(boss.x + 35 * BOSS_SCALE, boss.y - 30 * BOSS_SCALE);
+        spawnExplosion(boss.x + 70 * BOSS_SCALE, boss.y);
         playDeathSound();
         boss = null;
         rainbows.length = 0;
@@ -2840,7 +2940,7 @@ function renderFullScreen() {
     if (player.alive) drawPepperAura(player);
     if (playerCount === 2 && player2.alive) drawPepperAura(player2);
     if (playerCount === 1) {
-        drawHUD(player, 'W', 0, CANVAS_W);
+        drawHUD(player, 'W / ↑ / SPACE', 0, CANVAS_W);
     } else {
         drawHUD(player, 'W', 0, CANVAS_W / 2);
         drawHUD(player2, '↑', CANVAS_W / 2, CANVAS_W / 2);
@@ -3119,7 +3219,7 @@ function drawMenu() {
         const items = [
             { label: 'CAMPAIGN', sub: '10 levels · new worlds · a boss', color: '#FF6600' },
             { label: 'ENDLESS',  sub: 'fly forever on unlocked maps',    color: '#3355CC' },
-            { label: 'SHOP',     sub: 'spend coins on outfits',          color: '#FFD700' },
+            { label: 'SHOP',     sub: 'spend coins on armour',           color: '#FFD700' },
         ];
         items.forEach((it, i) => {
             const x = CANVAS_W / 2 - 150, y = 205 + i * 88, w = 300, h = 70;
@@ -3166,7 +3266,7 @@ function drawMenu() {
     } else if (menuScreen === 'players') {
         header('PLAYERS');
         const opts = [
-            { label: '1 PLAYER',  sub: 'hold  W  to fly',      color: '#3355CC', selColor: 'rgba(51,85,204,0.5)' },
+            { label: '1 PLAYER',  sub: 'W / ↑ / SPACE to fly', color: '#3355CC', selColor: 'rgba(51,85,204,0.5)' },
             { label: '2 PLAYERS', sub: 'W  +  ↑  to fly',      color: '#CC3333', selColor: 'rgba(204,51,51,0.5)' },
         ];
         opts.forEach((o, i) => {
@@ -3176,7 +3276,7 @@ function drawMenu() {
             pushBox(x, y, w, h, i);
         });
     } else if (menuScreen === 'shop') {
-        header('OUTFIT SHOP');
+        header('ARMOUR SHOP');
         OUTFITS.forEach((o, i) => {
             const w = 400, h = 60;
             const x = CANVAS_W / 2 - w / 2, y = 205 + i * 72;
