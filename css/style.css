@@ -9,6 +9,7 @@ body {
     justify-content: center;
     align-items: center;
     min-height: 100vh;
+    overflow: hidden;
     background: linear-gradient(135deg, #3d0000 0%, #1a0000 100%);
     font-family: 'Arial', sans-serif;
 }
@@ -23,6 +24,7 @@ body {
     display: block;
     box-shadow: 0 0 30px rgba(255, 68, 0, 0.6);
     cursor: none;
+    touch-action: none;
 }
 
 h1 {

@@ -106,6 +106,17 @@ function persistSave() {
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(saveData)); } catch (e) {}
 }
 
+// ─── Responsive Display ───────────────────────────────────────────────────────
+// The canvas always renders at 800x600 and is scaled with CSS to fill as much of
+// the window as possible (aspect ratio kept), on any screen size. Pointer input
+// already maps through getBoundingClientRect, so clicks/touches stay accurate.
+function applyDisplaySize() {
+    const scale = Math.min((window.innerWidth - 10) / CANVAS_W, (window.innerHeight - 10) / CANVAS_H);
+    canvas.style.width = Math.floor(CANVAS_W * scale) + 'px';
+    canvas.style.height = Math.floor(CANVAS_H * scale) + 'px';
+}
+window.addEventListener('resize', applyDisplaySize);
+
 // ─── Difficulty ───────────────────────────────────────────────────────────────
 const DIFFICULTIES = [
     { key: 'easy',   label: 'EASY',   lives: 5, coinMult: 1   },
@@ -2276,7 +2287,7 @@ function drawLevelHUD() {
     // boss incoming warning
     if (currentLevel === 10 && !boss) {
         const elapsed = levelDuration - levelTimeLeft;
-        if (elapsed > 290 * 60 && Math.sin(frameCount * 0.25) > 0) {
+        if (elapsed > 140 * 60 && Math.sin(frameCount * 0.25) > 0) {
             ctx.fillStyle = '#FF2222';
             ctx.font = 'bold 22px Arial';
             ctx.shadowBlur = 12;
@@ -2646,6 +2657,12 @@ function menuItemCount() {
     return 1;
 }
 
+function levelTimeLabel(n) {
+    const s = n * 30;
+    if (s < 60) return `${s} SEC`;
+    return s % 60 === 0 ? `${s / 60} MIN` : `${Math.floor(s / 60)}:${('0' + (s % 60)).slice(-2)} MIN`;
+}
+
 function menuGoto(screen) {
     menuScreen = screen;
     menuIndex = 0;
@@ -2694,7 +2711,7 @@ function startRun() {
     if (chosenMode === 'campaign') {
         currentLevel = chosenLevel;
         currentThemeIdx = chosenLevel - 1;
-        levelDuration = chosenLevel * 60 * 60; // level N lasts N minutes
+        levelDuration = chosenLevel * 30 * 60; // level N lasts N x 30 seconds
     } else {
         currentLevel = 0;
         levelDuration = 0;
@@ -2718,7 +2735,8 @@ function bankCoins() {
 function updateLevelProgress() {
     levelTimeLeft--;
     const elapsed = levelDuration - levelTimeLeft;
-    if (currentLevel === 10 && !boss && elapsed >= 300 * 60) spawnBoss();
+    // boss arrives halfway through level 10 (2:30 of 5:00)
+    if (currentLevel === 10 && !boss && elapsed >= 150 * 60) spawnBoss();
     if (levelTimeLeft <= 0) completeLevel();
 }
 
@@ -3123,7 +3141,7 @@ function drawMenu() {
                 const locked = i + 1 > saveData.unlockedLevel;
                 drawMenuBox(x, y, bw, bh, menuIndex === i,
                     locked ? '🔒' : `LEVEL ${i + 1}`,
-                    locked ? 'LOCKED' : `${THEMES[i].name} · ${i + 1} MIN`,
+                    locked ? 'LOCKED' : `${THEMES[i].name} · ${levelTimeLabel(i + 1)}`,
                     { disabled: locked, font: 14, fontSel: 16 });
             } else {
                 drawMenuBox(x, y, bw, bh, menuIndex === i, THEMES[i].name, 'endless', { font: 14, fontSel: 16, color: '#3355CC', selColor: 'rgba(51,85,204,0.5)' });
@@ -3308,4 +3326,5 @@ function loop(now) {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 loadSave();
+applyDisplaySize();
 requestAnimationFrame(loop);
