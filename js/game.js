@@ -18,50 +18,34 @@ const bgMusic = new Audio('soundtrack.mp3');
 bgMusic.loop = true;
 bgMusic.volume = 0.35;
 
-let musicStatus = 'loading'; // 'loading' | 'blocked' | 'playing' | 'error'
-let musicStartPending = false;
+let musicError = false;
 
-bgMusic.addEventListener('error', () => { musicStatus = 'error'; });
-bgMusic.addEventListener('canplaythrough', () => {
-    if (musicStatus === 'loading') {
-        musicStatus = 'blocked';
-        if (musicStartPending) tryStartMusic();
-    }
-});
+bgMusic.addEventListener('error', () => { musicError = true; });
 
 function tryStartMusic() {
-    if (musicStatus === 'playing' || musicStatus === 'error') return;
-    if (musicStatus === 'loading') { musicStartPending = true; return; }
-    bgMusic.play().then(() => {
-        musicStatus = 'playing';
-        musicStartPending = false;
-    }).catch(() => {
-        musicStatus = 'blocked';
-    });
+    if (musicError || !bgMusic.paused) return;
+    bgMusic.play().catch(() => {});
 }
 
 function drawMusicPrompt() {
-    if (musicStatus === 'playing') return;
+    if (!musicError) return;
     ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(CANVAS_W / 2 - 180, CANVAS_H - 44, 360, 32);
+    ctx.fillStyle = '#FF4444';
     ctx.font = 'bold 13px Arial';
     ctx.textAlign = 'center';
-    if (musicStatus === 'error') {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(CANVAS_W / 2 - 180, CANVAS_H - 44, 360, 32);
-        ctx.fillStyle = '#FF4444';
-        ctx.fillText('soundtrack.mp3 not found — place it next to index.html', CANVAS_W / 2, CANVAS_H - 24);
-    } else if (musicStatus === 'blocked') {
-        ctx.fillStyle = 'rgba(0,0,0,0.55)';
-        ctx.fillRect(CANVAS_W / 2 - 150, CANVAS_H - 44, 300, 32);
-        ctx.fillStyle = '#FFD700';
-        ctx.fillText('🔊 Click or press any key to enable music', CANVAS_W / 2, CANVAS_H - 24);
-    }
+    ctx.fillText('soundtrack.mp3 not found — place it next to index.html', CANVAS_W / 2, CANVAS_H - 24);
     ctx.restore();
 }
 
-window.addEventListener('keydown', tryStartMusic);
-canvas.addEventListener('mousedown', tryStartMusic);
-canvas.addEventListener('touchstart', tryStartMusic);
+// Try to play as soon as audio is ready (works if browser allows autoplay)
+bgMusic.addEventListener('canplaythrough', tryStartMusic, { once: true });
+
+// Retry on any user interaction (covers browsers that need a gesture)
+window.addEventListener('keydown',   tryStartMusic);
+window.addEventListener('mousedown', tryStartMusic);
+window.addEventListener('touchstart', tryStartMusic);
 
 // ─── Fire Sound ───────────────────────────────────────────────────────────────
 const fireSound = new Audio('fire.mp3');
@@ -102,15 +86,88 @@ coinSound.volume = 0.25;
 
 function playCoinSound() {
     const sfx = coinSound.cloneNode();
-    sfx.volume = 1.0;
+    sfx.volume = coinSound.volume;
     sfx.play().catch(() => {});
 }
 
+// ─── Save Data (coin bank, level unlocks, outfits) ───────────────────────────
+const SAVE_KEY = 'spicyRideSave';
+let saveData = { bank: 0, unlockedLevel: 1, outfits: ['classic'], equipped: 'classic' };
+let testingMode = false; // G key: infinite coins + all levels; nothing persists
+
+function loadSave() {
+    try {
+        const s = JSON.parse(localStorage.getItem(SAVE_KEY));
+        if (s) saveData = Object.assign(saveData, s);
+    } catch (e) { /* corrupted or blocked storage — keep defaults */ }
+}
+function persistSave() {
+    if (testingMode) return;
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(saveData)); } catch (e) {}
+}
+
+// ─── Difficulty ───────────────────────────────────────────────────────────────
+const DIFFICULTIES = [
+    { key: 'easy',   label: 'EASY',   lives: 5, coinMult: 1   },
+    { key: 'medium', label: 'MEDIUM', lives: 3, coinMult: 1.5 },
+    { key: 'hard',   label: 'HARD',   lives: 1, coinMult: 2   },
+];
+let difficultyIdx = 1;
+
+// ─── Outfits (shop) ───────────────────────────────────────────────────────────
+const OUTFITS = [
+    { id: 'classic', name: 'CLASSIC OUTFIT', price: 0,    shirt: '#3355CC' },
+    { id: 'lava',    name: 'LAVA OUTFIT',    price: 500,  shirt: '#FF4400' },
+    { id: 'snow',    name: 'SNOW OUTFIT',    price: 1000, shirt: '#DDEEFF' },
+    { id: 'gold',    name: 'GOLD OUTFIT',    price: 2000, shirt: '#FFD700' },
+];
+function equippedShirt() {
+    const o = OUTFITS.find(o => o.id === saveData.equipped);
+    return o ? o.shirt : '#3355CC';
+}
+
+// ─── Level Themes ─────────────────────────────────────────────────────────────
+// Campaign level N uses THEMES[N-1]; endless mode picks any unlocked theme.
+const THEMES = [
+    { name: 'LAB',     sky: '#07071A', indoor: true,  wall: '#0C0C22', wallLine: '#181830', deco: 'lab',
+      floor1: '#10101E', floor2: '#080812', belt1: '#202038', belt2: '#18182E', haz1: '#281600', haz2: '#141000', glow: '#FF6600', effect: null,      stars: false },
+    { name: 'CITY',    sky: '#0A0A2E', indoor: false, wall: '#101038', wallLine: '#1A1A4A', deco: 'city',
+      floor1: '#14141E', floor2: '#0A0A12', belt1: '#26263A', belt2: '#1C1C2E', haz1: '#282800', haz2: '#141400', glow: '#FFCC00', effect: null,      stars: true  },
+    { name: 'SNOW',    sky: '#1A2A4A', indoor: false, wall: '#223A5E', wallLine: '#2E4A72', deco: 'hills',
+      floor1: '#C8D8E8', floor2: '#8FA8C0', belt1: '#E8F2FA', belt2: '#C8D8E8', haz1: '#4A6A8A', haz2: '#324A62', glow: '#AADDFF', effect: 'snow',    stars: false },
+    { name: 'DESERT',  sky: '#B25A1E', indoor: false, wall: '#8A4218', wallLine: '#A0521E', deco: 'dunes',
+      floor1: '#C08A3E', floor2: '#8A5A24', belt1: '#D0A050', belt2: '#B08038', haz1: '#5A3A10', haz2: '#3E2808', glow: '#FFCC66', effect: null,      stars: false },
+    { name: 'OCEAN',   sky: '#04284A', indoor: false, wall: '#063A64', wallLine: '#0A4A7A', deco: 'waves',
+      floor1: '#0A3A5E', floor2: '#052238', belt1: '#12507A', belt2: '#0C3A5A', haz1: '#083048', haz2: '#052030', glow: '#44CCFF', effect: 'bubbles', stars: false },
+    { name: 'LAVA',    sky: '#1E0404', indoor: false, wall: '#320A06', wallLine: '#48120A', deco: 'volcano',
+      floor1: '#2A0E08', floor2: '#180604', belt1: '#3E1810', belt2: '#2A0E08', haz1: '#FF3300', haz2: '#661100', glow: '#FF3300', effect: 'embers',  stars: false },
+    { name: 'ACID',    sky: '#04140A', indoor: true,  wall: '#082212', wallLine: '#0E3A1E', deco: 'lab',
+      floor1: '#0A1E12', floor2: '#04100A', belt1: '#143822', belt2: '#0C2416', haz1: '#1E4A00', haz2: '#0E2400', glow: '#44FF44', effect: 'bubbles', stars: false },
+    { name: 'FACTORY', sky: '#14141A', indoor: true,  wall: '#1E1E26', wallLine: '#2C2C36', deco: 'lab',
+      floor1: '#1A1A22', floor2: '#0E0E14', belt1: '#30303C', belt2: '#24242E', haz1: '#3A2A00', haz2: '#1E1600', glow: '#FF8800', effect: 'embers',  stars: false },
+    { name: 'SPACE',   sky: '#020210', indoor: false, wall: '#060620', wallLine: '#0E0E30', deco: null,
+      floor1: '#101018', floor2: '#08080E', belt1: '#22222E', belt2: '#181822', haz1: '#101040', haz2: '#080820', glow: '#8844FF', effect: null,      stars: true  },
+    { name: 'MOON',    sky: '#04040E', indoor: false, wall: '#0A0A18', wallLine: '#14142A', deco: 'craters',
+      floor1: '#8A8A96', floor2: '#5A5A66', belt1: '#A2A2AE', belt2: '#8A8A96', haz1: '#3A3A46', haz2: '#26262E', glow: '#CCCCFF', effect: null,      stars: true  },
+];
+let currentThemeIdx = 0;
+function theme() { return THEMES[currentThemeIdx]; }
+
 // ─── Game State ───────────────────────────────────────────────────────────────
-const STATE = { MENU: 0, INTRO: 1, PLAYING: 2, DEAD: 3 };
+const STATE = { MENU: 0, INTRO: 1, PLAYING: 2, DEAD: 3, COMPLETE: 4 };
 let gameState = STATE.MENU;
 let playerCount = 1;
-let menuSelection = 0; // 0=1P, 1=2P
+let menuScreen = 'main'; // main | levels | maps | difficulty | players | shop
+let menuIndex = 0;
+let chosenMode = 'endless'; // campaign | endless
+let chosenLevel = 1;
+let menuBoxes = []; // clickable menu boxes, rebuilt by drawMenu every frame
+let currentLevel = 0; // 0 = endless, 1..10 = campaign level
+let levelDuration = 0; // total frames (campaign only)
+let levelTimeLeft = 0;
+let victory = false;
+let completeTimer = 0;
+let lastBanked = 0;
 let menuScrollOffset = 0;
 let introFrame = 0;
 let scrollOffset = 0;
@@ -134,24 +191,49 @@ let p1Thrusting = false;
 let p2Thrusting = false;
 
 function updateFireSound() {
-    if (p1Thrusting || (playerCount === 2 && p2Thrusting)) startFireSound();
+    if ((p1Thrusting && player.alive) ||
+        (playerCount === 2 && p2Thrusting && player2.alive)) startFireSound();
     else stopFireSound();
 }
 
 window.addEventListener('keydown', e => {
+    if (e.code === 'KeyG') {
+        // testing mode: infinite coins + all levels unlocked, progress not saved
+        testingMode = true;
+        saveData.bank = 999999;
+        saveData.unlockedLevel = 10;
+    }
     if (gameState === STATE.MENU) {
-        e.preventDefault();
-        if (e.code === 'ArrowLeft' || e.code === 'ArrowRight' ||
-            e.code === 'ArrowUp' || e.code === 'ArrowDown') {
-            menuSelection = menuSelection === 0 ? 1 : 0;
+        if (e.code === 'ArrowLeft' || e.code === 'ArrowUp') {
+            e.preventDefault();
+            const n = menuItemCount();
+            menuIndex = (menuIndex - 1 + n) % n;
+        }
+        if (e.code === 'ArrowRight' || e.code === 'ArrowDown') {
+            e.preventDefault();
+            const n = menuItemCount();
+            menuIndex = (menuIndex + 1) % n;
         }
         if (e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyW') {
-            confirmMenu();
+            e.preventDefault();
+            menuConfirm(menuIndex);
+        }
+        if (e.code === 'Escape' || e.code === 'Backspace') {
+            e.preventDefault();
+            menuBack();
+        }
+        return;
+    }
+    if (gameState === STATE.COMPLETE) {
+        if ((e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyW') && completeTimer > 60) {
+            e.preventDefault();
+            resetGame();
         }
         return;
     }
     if (e.code === 'KeyW') {
         e.preventDefault();
+        if (gameState === STATE.INTRO) startGame();
         if (gameState === STATE.PLAYING) { p1Thrusting = true; updateFireSound(); }
         if (gameState === STATE.DEAD && deadTimer > 90) resetGame();
     }
@@ -186,31 +268,54 @@ window.addEventListener('keyup', e => {
     if (e.code === 'KeyW') { p1Thrusting = false; updateFireSound(); }
     if (e.code === 'ArrowUp') { p2Thrusting = false; updateFireSound(); }
 });
+function canvasCoords(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        mx: (clientX - rect.left) * (CANVAS_W / rect.width),
+        my: (clientY - rect.top) * (CANVAS_H / rect.height),
+    };
+}
+
+function menuBoxAt(mx, my) {
+    for (const b of menuBoxes) {
+        if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) return b;
+    }
+    return null;
+}
+
+function handleMenuPointer(mx, my) {
+    const b = menuBoxAt(mx, my);
+    if (!b) return;
+    if (b.idx === -1) menuBack();
+    else { menuIndex = b.idx; menuConfirm(b.idx); }
+}
+
 canvas.addEventListener('click', e => {
+    const { mx, my } = canvasCoords(e.clientX, e.clientY);
     if (gameState === STATE.MENU) {
-        const rect = canvas.getBoundingClientRect();
-        const mx = (e.clientX - rect.left) * (CANVAS_W / rect.width);
-        const my = (e.clientY - rect.top) * (CANVAS_H / rect.height);
-        if (mx >= CANVAS_W / 2 - 160 && mx <= CANVAS_W / 2 - 20 && my >= 300 && my <= 370) {
-            menuSelection = 0; confirmMenu();
-        } else if (mx >= CANVAS_W / 2 + 20 && mx <= CANVAS_W / 2 + 160 && my >= 300 && my <= 370) {
-            menuSelection = 1; confirmMenu();
-        }
+        handleMenuPointer(mx, my);
+    } else if (gameState === STATE.DEAD && deadTimer > 90) {
+        resetGame();
+    } else if (gameState === STATE.COMPLETE && completeTimer > 60) {
+        resetGame();
     }
 });
 canvas.addEventListener('mousedown', e => {
     if (gameState === STATE.PLAYING) { p1Thrusting = true; updateFireSound(); }
-    if (gameState === STATE.DEAD && deadTimer > 90) resetGame();
 });
 canvas.addEventListener('mouseup', () => { p1Thrusting = false; updateFireSound(); });
 canvas.addEventListener('touchstart', e => {
     e.preventDefault();
     if (gameState === STATE.MENU) {
-        menuSelection = menuSelection === 0 ? 1 : 0;
+        const t = e.touches[0];
+        const { mx, my } = canvasCoords(t.clientX, t.clientY);
+        handleMenuPointer(mx, my);
         return;
     }
+    if (gameState === STATE.INTRO) { startGame(); return; }
     if (gameState === STATE.PLAYING) { p1Thrusting = true; updateFireSound(); }
     if (gameState === STATE.DEAD && deadTimer > 90) resetGame();
+    if (gameState === STATE.COMPLETE && completeTimer > 60) resetGame();
 }, { passive: false });
 canvas.addEventListener('touchend', () => { p1Thrusting = false; updateFireSound(); });
 
@@ -345,6 +450,7 @@ const player = {
     shirtColor: '#3355CC',
     pepperTimer: 0,
     lives: 3,
+    maxLives: 3,
     respawnTimer: 0,
     invincibleTimer: 0,
 };
@@ -366,6 +472,7 @@ const player2 = {
     shirtColor: '#CC3333',
     pepperTimer: 0,
     lives: 3,
+    maxLives: 3,
     respawnTimer: 0,
     invincibleTimer: 0,
 };
@@ -400,10 +507,11 @@ function respawnPlayerObj(pl) {
     pl.spice = 100;
     pl.respawnTimer = 0;
     pl.invincibleTimer = 60;
+    updateFireSound();
 }
 
 function resetPlayer() {
-    resetPlayerObj(player, '#3355CC', PLAYER_X);
+    resetPlayerObj(player, equippedShirt(), PLAYER_X);
     resetPlayerObj(player2, '#CC3333', PLAYER_X);
 }
 
@@ -671,7 +779,7 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 // ─── Ramen Bowl ───────────────────────────────────────────────────────────────
-let bowl = { x: 700, y: GROUND_Y - 60, visible: false, grabbed: false };
+let bowl = { x: 700, visible: false, grabbed: false };
 
 function drawRamenBowl(bx, by) {
     ctx.save();
@@ -723,105 +831,199 @@ function drawRamenBowl(bx, by) {
     ctx.restore();
 }
 
-// ─── Background ───────────────────────────────────────────────────────────────
+// ─── Background (themed per environment) ──────────────────────────────────────
 function drawBackground() {
+    const th = theme();
+
     // Base fill
-    ctx.fillStyle = '#07071A';
+    ctx.fillStyle = th.sky;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    // Ceiling metal plate
-    ctx.fillStyle = '#10102A';
-    ctx.fillRect(0, 0, CANVAS_W, 58);
-    ctx.strokeStyle = '#1C1C38';
-    ctx.lineWidth = 1;
-    const ceilOff = scrollOffset % 100;
-    for (let i = -1; i < CANVAS_W / 100 + 2; i++) {
-        ctx.strokeRect(i * 100 - ceilOff, 0, 100, 58);
-    }
-
-    // Ceiling lights with glow cones
-    const lightOff = (scrollOffset * 0.6) % 180;
-    for (let i = -1; i < CANVAS_W / 180 + 2; i++) {
-        const lx = i * 180 - lightOff + 90;
-        ctx.fillStyle = '#232342';
-        ctx.fillRect(lx - 26, 8, 52, 24);
-        ctx.fillStyle = '#FFDD55';
-        ctx.fillRect(lx - 20, 13, 40, 14);
-        const cone = ctx.createLinearGradient(0, 32, 0, 160);
-        cone.addColorStop(0, 'rgba(255,220,60,0.13)');
-        cone.addColorStop(1, 'rgba(255,220,60,0)');
-        ctx.fillStyle = cone;
-        ctx.beginPath();
-        ctx.moveTo(lx - 20, 32);
-        ctx.lineTo(lx + 20, 32);
-        ctx.lineTo(lx + 65, 160);
-        ctx.lineTo(lx - 65, 160);
-        ctx.closePath();
-        ctx.fill();
-    }
-
-    // Back wall panels (slow parallax)
-    const wallOff = (scrollOffset * 0.35) % 200;
-    for (let i = -1; i < CANVAS_W / 200 + 2; i++) {
-        const wx = i * 200 - wallOff;
-        ctx.fillStyle = '#0C0C22';
-        ctx.fillRect(wx, 58, 200, GROUND_Y - 58);
-        ctx.strokeStyle = '#181830';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(wx, 58, 200, GROUND_Y - 58);
-        ctx.fillStyle = '#001833';
-        ctx.fillRect(wx + 48, GROUND_Y - 170, 84, 58);
-        ctx.fillStyle = 'rgba(0,110,240,0.45)';
-        ctx.fillRect(wx + 51, GROUND_Y - 167, 78, 52);
-        ctx.strokeStyle = 'rgba(0,180,255,0.55)';
-        for (let row = 0; row < 4; row++) {
-            const lw = 20 + Math.abs(Math.sin(scrollOffset * 0.018 + i + row * 1.3)) * 40;
-            ctx.beginPath();
-            ctx.moveTo(wx + 54, GROUND_Y - 160 + row * 11);
-            ctx.lineTo(wx + 54 + lw, GROUND_Y - 160 + row * 11);
-            ctx.stroke();
+    // Starfield (city night / space / moon)
+    if (th.stars) {
+        ctx.save();
+        ctx.fillStyle = '#FFFFFF';
+        for (let i = 0; i < 60; i++) {
+            const span = CANVAS_W + 20;
+            const sx = ((i * 137 + 40 - scrollOffset * 0.06) % span + span) % span - 10;
+            const sy = 15 + ((i * 89) % (GROUND_Y - 140));
+            ctx.globalAlpha = 0.3 + Math.abs(Math.sin(frameCount * 0.03 + i)) * 0.6;
+            ctx.fillRect(sx, sy, 2, 2);
         }
+        ctx.restore();
     }
 
-    // Lab tables (mid parallax)
-    const tableOff = (scrollOffset * 0.65) % 280;
-    for (let i = -1; i < CANVAS_W / 280 + 2; i++) {
-        const tx = i * 280 - tableOff;
-        ctx.fillStyle = '#141428';
-        ctx.fillRect(tx, GROUND_Y - 112, 170, 8);
-        ctx.fillRect(tx + 6, GROUND_Y - 104, 12, 104);
-        ctx.fillRect(tx + 152, GROUND_Y - 104, 12, 104);
-        ctx.fillStyle = '#0A2035';
-        ctx.fillRect(tx + 62, GROUND_Y - 142, 20, 30);
-        ctx.fillStyle = 'rgba(180,40,40,0.45)';
-        ctx.fillRect(tx + 64, GROUND_Y - 125, 16, 13);
-        ctx.fillStyle = '#0A2035';
-        ctx.beginPath();
-        ctx.arc(tx + 28, GROUND_Y - 122, 12, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillRect(tx + 25, GROUND_Y - 139, 6, 17);
-        ctx.fillStyle = 'rgba(0,200,100,0.35)';
-        ctx.beginPath();
-        ctx.arc(tx + 28, GROUND_Y - 122, 9, 0, Math.PI * 2);
-        ctx.fill();
+    if (th.indoor) {
+        // Ceiling metal plate
+        ctx.fillStyle = th.wall;
+        ctx.fillRect(0, 0, CANVAS_W, 58);
+        ctx.strokeStyle = th.wallLine;
+        ctx.lineWidth = 1;
+        const ceilOff = scrollOffset % 100;
+        for (let i = -1; i < CANVAS_W / 100 + 2; i++) {
+            ctx.strokeRect(i * 100 - ceilOff, 0, 100, 58);
+        }
+
+        // Ceiling lights with glow cones
+        const lightOff = (scrollOffset * 0.6) % 180;
+        for (let i = -1; i < CANVAS_W / 180 + 2; i++) {
+            const lx = i * 180 - lightOff + 90;
+            ctx.fillStyle = th.wallLine;
+            ctx.fillRect(lx - 26, 8, 52, 24);
+            ctx.fillStyle = '#FFDD55';
+            ctx.fillRect(lx - 20, 13, 40, 14);
+            const cone = ctx.createLinearGradient(0, 32, 0, 160);
+            cone.addColorStop(0, 'rgba(255,220,60,0.13)');
+            cone.addColorStop(1, 'rgba(255,220,60,0)');
+            ctx.fillStyle = cone;
+            ctx.beginPath();
+            ctx.moveTo(lx - 20, 32);
+            ctx.lineTo(lx + 20, 32);
+            ctx.lineTo(lx + 65, 160);
+            ctx.lineTo(lx - 65, 160);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // Back wall panels with monitors (slow parallax)
+        const wallOff = (scrollOffset * 0.35) % 200;
+        for (let i = -1; i < CANVAS_W / 200 + 2; i++) {
+            const wx = i * 200 - wallOff;
+            ctx.fillStyle = th.wall;
+            ctx.fillRect(wx, 58, 200, GROUND_Y - 58);
+            ctx.strokeStyle = th.wallLine;
+            ctx.lineWidth = 1;
+            ctx.strokeRect(wx, 58, 200, GROUND_Y - 58);
+            ctx.fillStyle = '#001833';
+            ctx.fillRect(wx + 48, GROUND_Y - 170, 84, 58);
+            ctx.fillStyle = 'rgba(0,110,240,0.45)';
+            ctx.fillRect(wx + 51, GROUND_Y - 167, 78, 52);
+            ctx.strokeStyle = 'rgba(0,180,255,0.55)';
+            for (let row = 0; row < 4; row++) {
+                const lw = 20 + Math.abs(Math.sin(scrollOffset * 0.018 + i + row * 1.3)) * 40;
+                ctx.beginPath();
+                ctx.moveTo(wx + 54, GROUND_Y - 160 + row * 11);
+                ctx.lineTo(wx + 54 + lw, GROUND_Y - 160 + row * 11);
+                ctx.stroke();
+            }
+        }
+
+        // Lab tables (mid parallax)
+        const tableOff = (scrollOffset * 0.65) % 280;
+        for (let i = -1; i < CANVAS_W / 280 + 2; i++) {
+            const tx = i * 280 - tableOff;
+            ctx.fillStyle = th.wallLine;
+            ctx.fillRect(tx, GROUND_Y - 112, 170, 8);
+            ctx.fillRect(tx + 6, GROUND_Y - 104, 12, 104);
+            ctx.fillRect(tx + 152, GROUND_Y - 104, 12, 104);
+            ctx.fillStyle = '#0A2035';
+            ctx.fillRect(tx + 62, GROUND_Y - 142, 20, 30);
+            ctx.fillStyle = 'rgba(180,40,40,0.45)';
+            ctx.fillRect(tx + 64, GROUND_Y - 125, 16, 13);
+            ctx.fillStyle = '#0A2035';
+            ctx.beginPath();
+            ctx.arc(tx + 28, GROUND_Y - 122, 12, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillRect(tx + 25, GROUND_Y - 139, 6, 17);
+            ctx.fillStyle = 'rgba(0,200,100,0.35)';
+            ctx.beginPath();
+            ctx.arc(tx + 28, GROUND_Y - 122, 9, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    } else {
+        // Outdoor scenery silhouettes (slow parallax, variation via world tile index)
+        const off = scrollOffset * 0.25;
+        const tileW = 170;
+        const first = Math.floor(off / tileW);
+        for (let i = first - 1; i < first + CANVAS_W / tileW + 2; i++) {
+            const bx = i * tileW - off;
+            const h1 = ((i * 97 % 5) + 5) % 5; // 0..4 stable per world tile
+            if (th.deco === 'city') {
+                const bh = 110 + h1 * 38;
+                ctx.fillStyle = th.wall;
+                ctx.fillRect(bx, GROUND_Y - bh, 120, bh);
+                ctx.fillStyle = 'rgba(255,220,110,0.5)';
+                for (let wy = 0; wy < Math.floor(bh / 34); wy++) {
+                    for (let wxk = 0; wxk < 4; wxk++) {
+                        if ((i * 31 + wy * 7 + wxk * 13) % 3 === 0) continue; // some windows dark
+                        ctx.fillRect(bx + 12 + wxk * 28, GROUND_Y - bh + 12 + wy * 34, 14, 18);
+                    }
+                }
+            } else if (th.deco === 'hills') {
+                ctx.fillStyle = 'rgba(225,238,250,0.30)';
+                ctx.beginPath();
+                ctx.ellipse(bx + 85, GROUND_Y + 45, 150, 90 + h1 * 14, 0, Math.PI, 0);
+                ctx.fill();
+            } else if (th.deco === 'dunes') {
+                ctx.fillStyle = 'rgba(160,100,40,0.45)';
+                ctx.beginPath();
+                ctx.ellipse(bx + 85, GROUND_Y + 55, 160, 80 + h1 * 12, 0, Math.PI, 0);
+                ctx.fill();
+            } else if (th.deco === 'volcano') {
+                const vh = 150 + h1 * 30;
+                ctx.fillStyle = '#2A0A06';
+                ctx.beginPath();
+                ctx.moveTo(bx - 30, GROUND_Y);
+                ctx.lineTo(bx + 85, GROUND_Y - vh);
+                ctx.lineTo(bx + 200, GROUND_Y);
+                ctx.closePath();
+                ctx.fill();
+                // glowing crater
+                ctx.fillStyle = 'rgba(255,80,0,0.8)';
+                ctx.fillRect(bx + 70, GROUND_Y - vh, 30, 6);
+                const vg = ctx.createRadialGradient(bx + 85, GROUND_Y - vh, 0, bx + 85, GROUND_Y - vh, 60);
+                vg.addColorStop(0, 'rgba(255,100,0,0.35)');
+                vg.addColorStop(1, 'rgba(255,100,0,0)');
+                ctx.fillStyle = vg;
+                ctx.fillRect(bx + 25, GROUND_Y - vh - 60, 120, 120);
+            } else if (th.deco === 'waves') {
+                ctx.strokeStyle = 'rgba(80,180,255,0.25)';
+                ctx.lineWidth = 3;
+                for (let row = 0; row < 3; row++) {
+                    const wy = 140 + row * 90;
+                    ctx.beginPath();
+                    ctx.moveTo(bx, wy);
+                    ctx.quadraticCurveTo(bx + 42, wy - 14 + Math.sin(frameCount * 0.04 + i + row) * 6, bx + 85, wy);
+                    ctx.quadraticCurveTo(bx + 128, wy + 14, bx + tileW, wy);
+                    ctx.stroke();
+                }
+            }
+            // 'craters' theme decorates the floor below instead
+        }
     }
 
     // Floor
     const floorGrad = ctx.createLinearGradient(0, GROUND_Y, 0, CANVAS_H);
-    floorGrad.addColorStop(0, '#10101E');
-    floorGrad.addColorStop(1, '#080812');
+    floorGrad.addColorStop(0, th.floor1);
+    floorGrad.addColorStop(1, th.floor2);
     ctx.fillStyle = floorGrad;
     ctx.fillRect(0, GROUND_Y, CANVAS_W, CANVAS_H - GROUND_Y);
 
+    // Moon craters on the floor
+    if (th.deco === 'craters') {
+        const cOff = scrollOffset % 220;
+        for (let i = -1; i < CANVAS_W / 220 + 2; i++) {
+            const cx2 = i * 220 - cOff + 80;
+            ctx.fillStyle = 'rgba(40,40,52,0.55)';
+            ctx.beginPath();
+            ctx.ellipse(cx2, GROUND_Y + 42, 34, 9, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(150,150,165,0.5)';
+            ctx.beginPath();
+            ctx.ellipse(cx2, GROUND_Y + 39, 34, 9, 0, Math.PI, 0);
+            ctx.fill();
+        }
+    }
+
     // Conveyor belt
-    ctx.fillStyle = '#18182E';
+    ctx.fillStyle = th.belt2;
     ctx.fillRect(0, GROUND_Y, CANVAS_W, 20);
     const beltOff = scrollOffset % 28;
     for (let i = -1; i < CANVAS_W / 28 + 2; i++) {
-        ctx.fillStyle = i % 2 === 0 ? '#202038' : '#18182E';
+        ctx.fillStyle = i % 2 === 0 ? th.belt1 : th.belt2;
         ctx.fillRect(i * 28 - beltOff, GROUND_Y, 14, 20);
     }
-    ctx.fillStyle = '#2A2A48';
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
     const arrowOff = scrollOffset % 56;
     for (let i = -1; i < CANVAS_W / 56 + 2; i++) {
         const ax = i * 56 - arrowOff + 8;
@@ -836,12 +1038,12 @@ function drawBackground() {
     // Hazard stripes
     const hazOff = scrollOffset % 36;
     for (let i = -1; i < CANVAS_W / 36 + 2; i++) {
-        ctx.fillStyle = i % 2 === 0 ? '#281600' : '#141000';
+        ctx.fillStyle = i % 2 === 0 ? th.haz1 : th.haz2;
         ctx.fillRect(i * 36 - hazOff, GROUND_Y + 20, 18, 8);
     }
 
     // Floor tile grid
-    ctx.strokeStyle = '#141422';
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
     ctx.lineWidth = 1;
     const ftOff = scrollOffset % 80;
     for (let i = -1; i < CANVAS_W / 80 + 2; i++) {
@@ -849,7 +1051,7 @@ function drawBackground() {
     }
 
     // Ground edge glow
-    ctx.fillStyle = '#FF6600';
+    ctx.fillStyle = th.glow;
     ctx.globalAlpha = 0.2;
     ctx.fillRect(0, GROUND_Y, CANVAS_W, 3);
     ctx.globalAlpha = 1;
@@ -871,11 +1073,11 @@ function spawnObstacle() {
         });
     } else if (type < 0.7) {
         // missile
-        const my = 80 + Math.random() * (GROUND_Y - 150);
+        const my = 80 + Math.random() * (GROUND_Y - 120);
         obstacles.push({
             type: 'missile', x: CANVAS_W + 60, y: my,
             vx: -(7 + scrollSpeed * 0.5),
-            warningShown: false, smokeTimer: 0
+            smokeTimer: 0
         });
     } else {
         // bucket
@@ -1269,6 +1471,7 @@ function updateCoins() {
         if (!coins[i].collected) {
             for (const pl of [player, player2]) {
                 if (!pl.alive) continue;
+                if (playerCount === 1 && pl === player2) continue;
                 const dx = coins[i].x - (pl.x + pl.width / 2);
                 const dy = coins[i].y - (pl.y + pl.height / 2);
                 if (Math.sqrt(dx * dx + dy * dy) < 24) {
@@ -1326,6 +1529,7 @@ function updateRamens() {
         if (!r.collected) {
             for (const pl of [player, player2]) {
                 if (!pl.alive) continue;
+                if (playerCount === 1 && pl === player2) continue;
                 const dx = r.x - (pl.x + pl.width / 2);
                 const dy = r.y - (pl.y + pl.height / 2);
                 if (Math.sqrt(dx * dx + dy * dy) < 36) {
@@ -1425,6 +1629,7 @@ function updateSauces() {
         if (!s.collected) {
             for (const pl of [player, player2]) {
                 if (!pl.alive) continue;
+                if (playerCount === 1 && pl === player2) continue;
                 const dx = s.x - (pl.x + pl.width / 2);
                 const dy = s.y - (pl.y + pl.height / 2);
                 if (Math.sqrt(dx * dx + dy * dy) < 36) {
@@ -1670,6 +1875,226 @@ function drawPepperAura(pl) {
     ctx.restore();
 }
 
+// ─── Boss: Giant Winged Rainbow Fish (level 10) ───────────────────────────────
+let boss = null;
+let rainbows = [];
+
+function activePlayersList() {
+    return playerCount === 2 ? [player, player2] : [player];
+}
+
+function spawnBoss() {
+    boss = {
+        x: CANVAS_W + 130,
+        y: CANVAS_H / 2 - 60,
+        wingT: 0,
+        chargeTimer: 0,   // telegraph before each vomit
+        attackTimer: 180,
+    };
+}
+
+function updateBoss() {
+    boss.wingT += 0.15;
+    if (boss.x > CANVAS_W - 150) boss.x -= 2; // entrance glide
+
+    // drift toward a living player's height
+    const target = player.alive ? player : (playerCount === 2 && player2.alive ? player2 : null);
+    const ty = target ? target.y + target.height / 2 : CANVAS_H / 2;
+    boss.y += Math.max(-1.4, Math.min(1.4, (ty - boss.y) * 0.02));
+    boss.y = Math.max(95, Math.min(GROUND_Y - 120, boss.y));
+
+    if (boss.chargeTimer > 0) {
+        boss.chargeTimer--;
+        if (boss.chargeTimer === 0) fireRainbow();
+    } else {
+        boss.attackTimer--;
+        if (boss.attackTimer <= 0) {
+            boss.chargeTimer = 40;
+            boss.attackTimer = 110 + Math.floor(Math.random() * 80);
+        }
+    }
+
+    // body contact kills
+    for (const pl of activePlayersList()) {
+        if (!pl.alive || pl.invincibleTimer > 0 || pl.pepperTimer > 0) continue;
+        if (Math.abs((pl.x + pl.width / 2) - boss.x) < 70 &&
+            Math.abs((pl.y + pl.height / 2) - boss.y) < 50) killPlayerObj(pl);
+    }
+}
+
+function fireRainbow() {
+    const target = player.alive ? player : (playerCount === 2 && player2.alive ? player2 : player);
+    const mx = boss.x - 60, my = boss.y + 8;
+    const base = Math.atan2((target.y + target.height / 2) - my, (target.x + target.width / 2) - mx);
+    for (let i = 0; i < 7; i++) {
+        const ang = base + (i - 3) * 0.09;
+        const spd = 5 + Math.random() * 2;
+        rainbows.push({
+            x: mx, y: my,
+            vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+            hue: i * 51, r: 9 + Math.random() * 5,
+        });
+    }
+    playCrunchSound();
+}
+
+function updateRainbows() {
+    for (let i = rainbows.length - 1; i >= 0; i--) {
+        const rb = rainbows[i];
+        rb.x += rb.vx;
+        rb.y += rb.vy;
+        rb.hue = (rb.hue + 6) % 360;
+        if (rb.x < -30 || rb.y < -30 || rb.y > CANVAS_H + 30) { rainbows.splice(i, 1); continue; }
+        for (const pl of activePlayersList()) {
+            if (!pl.alive || pl.invincibleTimer > 0 || pl.pepperTimer > 0) continue;
+            const dx = rb.x - (pl.x + pl.width / 2);
+            const dy = rb.y - (pl.y + pl.height / 2);
+            if (Math.sqrt(dx * dx + dy * dy) < rb.r + 16) {
+                killPlayerObj(pl);
+                rainbows.splice(i, 1);
+                break;
+            }
+        }
+    }
+}
+
+function drawRainbows() {
+    rainbows.forEach(rb => {
+        ctx.save();
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = `hsl(${rb.hue},100%,60%)`;
+        ctx.fillStyle = `hsl(${rb.hue},100%,60%)`;
+        ctx.beginPath();
+        ctx.arc(rb.x, rb.y, rb.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath();
+        ctx.arc(rb.x - rb.r * 0.3, rb.y - rb.r * 0.3, rb.r * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    });
+}
+
+function drawBoss() {
+    if (!boss) return;
+    const bx = boss.x, by = boss.y;
+    const flap = Math.sin(boss.wingT) * 0.5;
+    const charging = boss.chargeTimer > 0;
+    ctx.save();
+
+    // white angel wings
+    for (const side of [-1, 1]) {
+        ctx.save();
+        ctx.translate(bx + side * 30, by - 40);
+        ctx.rotate(side * (0.5 + flap * 0.4));
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.beginPath();
+        ctx.ellipse(0, -28, 18, 42, side * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(215,228,255,0.9)';
+        ctx.beginPath();
+        ctx.ellipse(side * 8, -14, 10, 26, side * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // tail
+    ctx.fillStyle = charging ? '#99AADD' : '#5588BB';
+    ctx.beginPath();
+    ctx.moveTo(bx + 60, by);
+    ctx.lineTo(bx + 102, by - 32);
+    ctx.lineTo(bx + 102, by + 32);
+    ctx.closePath();
+    ctx.fill();
+
+    // body
+    const bodyGrad = ctx.createLinearGradient(bx, by - 45, bx, by + 45);
+    bodyGrad.addColorStop(0, charging ? '#BBDDFF' : '#77AADD');
+    bodyGrad.addColorStop(1, charging ? '#88AACC' : '#446699');
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath();
+    ctx.ellipse(bx, by, 70, 45, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // belly
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(bx - 10, by + 15, 45, 22, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // side fin
+    ctx.fillStyle = '#446699';
+    ctx.beginPath();
+    ctx.moveTo(bx + 5, by + 38);
+    ctx.lineTo(bx + 25, by + 62);
+    ctx.lineTo(bx + 38, by + 34);
+    ctx.closePath();
+    ctx.fill();
+
+    // eye
+    ctx.fillStyle = 'white';
+    ctx.beginPath();
+    ctx.arc(bx - 35, by - 12, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.arc(bx - 38, by - 12, 5.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // mouth — gapes wide while charging
+    ctx.fillStyle = '#220033';
+    ctx.beginPath();
+    if (charging) ctx.ellipse(bx - 62, by + 8, 12, 16, 0, 0, Math.PI * 2);
+    else ctx.ellipse(bx - 62, by + 8, 8, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (charging) {
+        // rainbow glow building in the mouth
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = `hsl(${(frameCount * 12) % 360},100%,60%)`;
+        ctx.beginPath();
+        ctx.arc(bx - 62, by + 8, 6 + (40 - boss.chargeTimer) * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    }
+
+    ctx.restore();
+}
+
+// ─── Weather Effects (per-theme ambience) ─────────────────────────────────────
+let weather = [];
+
+function updateWeather() {
+    const eff = theme().effect;
+    if (!eff) { weather.length = 0; return; }
+    if (weather.length < 50 && frameCount % 3 === 0) {
+        if (eff === 'snow') {
+            weather.push({ x: Math.random() * (CANVAS_W + 40), y: -10, vy: 0.7 + Math.random() * 0.9, sway: Math.random() * Math.PI * 2, r: 1.5 + Math.random() * 2 });
+        } else { // embers and bubbles rise from the ground
+            weather.push({ x: Math.random() * CANVAS_W, y: GROUND_Y + Math.random() * 30, vy: -(0.5 + Math.random() * 1.2), sway: Math.random() * Math.PI * 2, r: eff === 'embers' ? 1 + Math.random() * 2 : 2 + Math.random() * 3 });
+        }
+    }
+    for (let i = weather.length - 1; i >= 0; i--) {
+        const w = weather[i];
+        w.y += w.vy;
+        w.x += Math.sin(frameCount * 0.05 + w.sway) * 0.6 - scrollSpeed * 0.15;
+        if (w.y > GROUND_Y + 10 || w.y < 40 || w.x < -20) weather.splice(i, 1);
+    }
+}
+
+function drawWeather() {
+    const eff = theme().effect;
+    if (!eff) return;
+    ctx.save();
+    for (const w of weather) {
+        ctx.beginPath();
+        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
+        if (eff === 'snow') { ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fill(); }
+        else if (eff === 'embers') { ctx.fillStyle = `rgba(255,${110 + ((w.sway * 40) | 0) % 70},0,0.8)`; ctx.fill(); }
+        else { ctx.strokeStyle = 'rgba(180,230,255,0.7)'; ctx.lineWidth = 1.2; ctx.stroke(); }
+    }
+    ctx.restore();
+}
+
 // ─── Collision Detection ──────────────────────────────────────────────────────
 function checkPlayerCollisions(pl) {
     if (!pl.alive) return;
@@ -1683,12 +2108,13 @@ function checkPlayerCollisions(pl) {
     for (const ob of obstacles) {
         let hit = false;
         if (ob.type === 'laser') {
-            const inX = px < ob.x + 6 && px + pw > ob.x - 6;
+            const inX = px < ob.x + 20 && px + pw > ob.x - 20;
             const inTopBeam = py < ob.gapTop;
             const inBotBeam = py + ph > ob.gapTop + ob.gapH;
             if (inX && (inTopBeam || inBotBeam)) hit = true;
         } else if (ob.type === 'missile') {
-            if (px < ob.x + 50 && px + pw > ob.x - 30 &&
+            if (ob.x <= CANVAS_W - 80 &&
+                px < ob.x + 50 && px + pw > ob.x - 30 &&
                 py < ob.y + 12 && py + ph > ob.y - 12) hit = true;
         } else if (ob.type === 'bucket') {
             const streamW = 28;
@@ -1726,7 +2152,7 @@ function killPlayerObj(pl) {
         stopFireSound();
         bgMusic.pause();
         bgMusic.currentTime = 0;
-        musicStatus = 'blocked';
+        bankCoins();
         gameState = STATE.DEAD;
         deadTimer = 0;
     } else if (pl.lives > 0) {
@@ -1748,7 +2174,7 @@ function drawHUD(pl, keyHint, xOff, hw) {
     ctx.fillText(`Coins: ${pl.coinScore}`, xOff + 16, 48);
     // life hearts
     ctx.font = '15px Arial';
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < (pl.maxLives || 3); i++) {
         ctx.fillStyle = i < pl.lives ? '#FF2244' : '#553333';
         ctx.fillText('♥', xOff + 16 + i * 20, 68);
     }
@@ -1831,6 +2257,101 @@ function drawHUD(pl, keyHint, xOff, hw) {
     ctx.restore();
 }
 
+// ─── Level HUD (campaign timer + boss warning) ────────────────────────────────
+function drawLevelHUD() {
+    if (currentLevel <= 0) return;
+    ctx.save();
+    ctx.textAlign = 'center';
+    const secs = Math.max(0, Math.ceil(levelTimeLeft / 60));
+    const mm = Math.floor(secs / 60), ss = ('0' + (secs % 60)).slice(-2);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(CANVAS_W / 2 - 66, 34, 132, 44);
+    ctx.fillStyle = '#FFAA00';
+    ctx.font = 'bold 11px Arial';
+    ctx.fillText(`LEVEL ${currentLevel} — ${theme().name}`, CANVAS_W / 2, 48);
+    ctx.fillStyle = '#FFDD55';
+    ctx.font = 'bold 20px Arial';
+    ctx.fillText(`${mm}:${ss}`, CANVAS_W / 2, 70);
+
+    // boss incoming warning
+    if (currentLevel === 10 && !boss) {
+        const elapsed = levelDuration - levelTimeLeft;
+        if (elapsed > 290 * 60 && Math.sin(frameCount * 0.25) > 0) {
+            ctx.fillStyle = '#FF2222';
+            ctx.font = 'bold 22px Arial';
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = '#FF0000';
+            ctx.fillText('!! SOMETHING HUGE APPROACHES !!', CANVAS_W / 2, 108);
+        }
+    }
+    ctx.restore();
+}
+
+// ─── Testing Mode Badge ───────────────────────────────────────────────────────
+function drawTestingBadge() {
+    if (!testingMode) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(CANVAS_W - 250, CANVAS_H - 30, 242, 22);
+    ctx.fillStyle = '#FFDD00';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText('⚡ TESTING MODE — progress not saved', CANVAS_W - 16, CANVAS_H - 14);
+    ctx.restore();
+}
+
+// ─── Level Complete Screen ────────────────────────────────────────────────────
+function drawLevelComplete() {
+    const fade = Math.min(1, completeTimer / 40);
+    ctx.save();
+    ctx.globalAlpha = fade * 0.8;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    ctx.globalAlpha = fade;
+    ctx.textAlign = 'center';
+
+    if (victory) {
+        ctx.fillStyle = `hsl(${(frameCount * 4) % 360},100%,60%)`;
+        ctx.font = 'bold 44px Arial';
+        ctx.shadowBlur = 22;
+        ctx.shadowColor = '#FFFFFF';
+        ctx.fillText('CAMPAIGN COMPLETE!', CANVAS_W / 2, 120);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 20px Arial';
+        ctx.fillText('YOU DEFEATED THE RAINBOW FISH!', CANVAS_W / 2, 165);
+    } else {
+        ctx.fillStyle = '#44FF66';
+        ctx.font = 'bold 44px Arial';
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = '#00FF44';
+        ctx.fillText(`LEVEL ${currentLevel} COMPLETE!`, CANVAS_W / 2, 130);
+        ctx.shadowBlur = 0;
+    }
+
+    ctx.fillStyle = 'white';
+    ctx.font = '18px Arial';
+    const mult = DIFFICULTIES[difficultyIdx].coinMult;
+    ctx.fillText(`Coins banked: +${lastBanked}${mult !== 1 ? `  (×${mult} ${DIFFICULTIES[difficultyIdx].label.toLowerCase()} bonus)` : ''}`, CANVAS_W / 2, 230);
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 20px Arial';
+    ctx.fillText(`🪙 Bank: ${saveData.bank}`, CANVAS_W / 2, 264);
+
+    if (!victory && currentLevel + 1 <= THEMES.length) {
+        ctx.fillStyle = '#FFAA00';
+        ctx.font = 'bold 17px Arial';
+        ctx.fillText(`Level ${currentLevel + 1} (${THEMES[currentLevel].name}) unlocked!`, CANVAS_W / 2, 306);
+    }
+
+    if (completeTimer > 60) {
+        const blink = Math.sin(frameCount * 0.15) > 0;
+        ctx.fillStyle = blink ? '#FFFFFF' : '#FFAA00';
+        ctx.font = '17px Arial';
+        ctx.fillText('W / ENTER  or  CLICK  to continue', CANVAS_W / 2, 370);
+    }
+    ctx.restore();
+}
+
 // ─── Game Over Screen ─────────────────────────────────────────────────────────
 function drawGameOver() {
     if (deadTimer < 50) return;
@@ -1852,7 +2373,7 @@ function drawGameOver() {
     if (playerCount === 1) {
         ctx.fillStyle = '#FF9900';
         ctx.font = 'bold 18px Arial';
-        ctx.fillText('TOO SPICY FOR YOU!', CANVAS_W / 2, 128);
+        ctx.fillText(currentLevel > 0 ? `LEVEL ${currentLevel} FAILED — TOO SPICY!` : 'TOO SPICY FOR YOU!', CANVAS_W / 2, 128);
 
         const p1Total = player.distanceScore + player.coinScore * 5;
         ctx.fillStyle = player.shirtColor;
@@ -1865,10 +2386,12 @@ function drawGameOver() {
         ctx.fillStyle = '#FFD700';
         ctx.font = 'bold 22px Arial';
         ctx.fillText(`TOTAL: ${p1Total}`, CANVAS_W / 2, 292);
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText(`🪙 +${lastBanked} coins banked (bank: ${saveData.bank})`, CANVAS_W / 2, 324);
     } else {
         ctx.fillStyle = '#FF9900';
         ctx.font = 'bold 18px Arial';
-        ctx.fillText('TOO SPICY FOR BOTH OF YOU!', CANVAS_W / 2, 128);
+        ctx.fillText(currentLevel > 0 ? `LEVEL ${currentLevel} FAILED — TOO SPICY!` : 'TOO SPICY FOR BOTH OF YOU!', CANVAS_W / 2, 128);
 
         const p1Total = player.distanceScore + player.coinScore * 5;
         ctx.fillStyle = player.shirtColor;
@@ -1915,13 +2438,16 @@ function drawGameOver() {
             ctx.fillText("IT'S A TIE!", CANVAS_W / 2, 330);
         }
         ctx.shadowBlur = 0;
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText(`🪙 +${lastBanked} coins banked (bank: ${saveData.bank})`, CANVAS_W / 2, 360);
     }
 
     if (deadTimer > 90) {
         const blink = Math.sin(frameCount * 0.15) > 0;
         ctx.fillStyle = blink ? '#FFFFFF' : '#FFAA00';
         ctx.font = '17px Arial';
-        ctx.fillText('ENTER  or  CLICK  to return to menu', CANVAS_W / 2, 390);
+        ctx.fillText('W / ENTER  or  CLICK  to return to menu', CANVAS_W / 2, 390);
     }
     ctx.restore();
 }
@@ -1930,6 +2456,16 @@ function drawGameOver() {
 function updateIntro() {
     introFrame++;
     if (introFrame > 340) startGame();
+
+    // bowl slides in from the right (from frame 100), then is held near the face
+    if (introFrame >= 100) {
+        const targetBowlX = PLAYER_X + player.width + 80;
+        if (!bowl.visible) { bowl.visible = true; bowl.x = CANVAS_W + 50; }
+        if (!bowl.grabbed) bowl.x = Math.max(targetBowlX, bowl.x - 8);
+        if (introFrame >= 165) bowl.grabbed = true;
+        if (introFrame >= 180) bowl.x = PLAYER_X + player.width - 10;
+        if (introFrame >= 240) bowl.visible = false; // eaten
+    }
 
     // Spawn particles for fire burst
     if (introFrame >= 270 && introFrame < 310) {
@@ -1995,17 +2531,10 @@ function drawIntro() {
         ctx.restore();
     }
 
-    // bowl slides in (100–140)
-    if (f >= 100) {
-        const targetBowlX = PLAYER_X + player.width + 80;
-        if (!bowl.visible) { bowl.visible = true; bowl.x = CANVAS_W + 50; }
-        if (!bowl.grabbed) {
-            bowl.x = Math.max(targetBowlX, bowl.x - 8);
-        }
-        if (bowl.x <= targetBowlX + 5 && !bowl.grabbed) {
-            bowl.x = targetBowlX;
-        }
-        drawRamenBowl(bowl.x, GROUND_Y - 70);
+    // bowl (position/visibility updated in updateIntro)
+    if (bowl.visible && f >= 100) {
+        if (f >= 180) drawRamenBowl(bowl.x, GROUND_Y - player.height + 10);
+        else drawRamenBowl(bowl.x, GROUND_Y - 70);
     }
 
     // Character
@@ -2015,27 +2544,13 @@ function drawIntro() {
 
     if (f >= 140 && f < 180) {
         introState = 'reaching';
-        if (f >= 165) bowl.grabbed = true;
     } else if (f >= 180 && f < 270) {
         introState = 'eating';
-        bowl.grabbed = true;
-        // bowl near face
-        if (bowl.visible) {
-            bowl.x = PLAYER_X + player.width - 10;
-            drawRamenBowl(bowl.x, GROUND_Y - player.height + 10);
-            bowl.visible = f < 240;
-        }
-    } else if (f >= 270 && f < 320) {
-        introState = 'idle';
-        // launch: character rises
-        const launchT = (f - 300) / 20;
-        if (f >= 300) charY = (GROUND_Y - player.height) - launchT * launchT * 120;
     }
-
-    if (introState !== 'eating' || f >= 240) {
-        if (bowl.visible && f >= 100 && f < 180) {
-            drawRamenBowl(bowl.x, GROUND_Y - 70);
-        }
+    // launch: character rises (continues through the fade-out)
+    if (f >= 300) {
+        const launchT = (f - 300) / 20;
+        charY = (GROUND_Y - player.height) - launchT * launchT * 120;
     }
 
     drawCharacter({ ...player, y: charY, headRed: charHeadRed, crumpled: false }, false, introState);
@@ -2090,6 +2605,16 @@ function startGame() {
     tryStartMusic();
     gameState = STATE.PLAYING;
     resetPlayer();
+    const diff = DIFFICULTIES[difficultyIdx];
+    for (const pl of [player, player2]) {
+        pl.lives = diff.lives;
+        pl.maxLives = diff.lives;
+    }
+    levelTimeLeft = levelDuration;
+    victory = false;
+    boss = null;
+    rainbows.length = 0;
+    weather.length = 0;
     obstacles.length = 0;
     coins.length = 0;
     particles.length = 0;
@@ -2108,21 +2633,123 @@ function startGame() {
     hudPromptAlpha = 1;
 }
 
-function confirmMenu() {
-    playerCount = menuSelection === 0 ? 1 : 2;
+// ─── Menu Flow ────────────────────────────────────────────────────────────────
+function menuItemCount() {
+    switch (menuScreen) {
+        case 'main':       return 3;
+        case 'levels':     return THEMES.length;
+        case 'maps':       return Math.min(saveData.unlockedLevel, THEMES.length);
+        case 'difficulty': return DIFFICULTIES.length;
+        case 'players':    return 2;
+        case 'shop':       return OUTFITS.length;
+    }
+    return 1;
+}
+
+function menuGoto(screen) {
+    menuScreen = screen;
+    menuIndex = 0;
+}
+
+function menuBack() {
+    if (menuScreen === 'main') return;
+    if (menuScreen === 'difficulty') menuGoto(chosenMode === 'campaign' ? 'levels' : 'maps');
+    else if (menuScreen === 'players') menuGoto('difficulty');
+    else menuGoto('main');
+}
+
+function menuConfirm(idx) {
+    if (menuScreen === 'main') {
+        if (idx === 0) { chosenMode = 'campaign'; menuGoto('levels'); }
+        else if (idx === 1) { chosenMode = 'endless'; menuGoto('maps'); }
+        else menuGoto('shop');
+    } else if (menuScreen === 'levels') {
+        if (idx + 1 > saveData.unlockedLevel) return; // locked
+        chosenLevel = idx + 1;
+        menuGoto('difficulty');
+    } else if (menuScreen === 'maps') {
+        currentThemeIdx = idx;
+        menuGoto('difficulty');
+    } else if (menuScreen === 'difficulty') {
+        difficultyIdx = idx;
+        menuGoto('players');
+    } else if (menuScreen === 'players') {
+        playerCount = idx + 1;
+        startRun();
+    } else if (menuScreen === 'shop') {
+        const o = OUTFITS[idx];
+        if (saveData.outfits.includes(o.id)) {
+            saveData.equipped = o.id;
+            persistSave();
+        } else if (saveData.bank >= o.price) {
+            saveData.bank -= o.price;
+            saveData.outfits.push(o.id);
+            saveData.equipped = o.id;
+            persistSave();
+        }
+    }
+}
+
+function startRun() {
+    if (chosenMode === 'campaign') {
+        currentLevel = chosenLevel;
+        currentThemeIdx = chosenLevel - 1;
+        levelDuration = chosenLevel * 60 * 60; // level N lasts N minutes
+    } else {
+        currentLevel = 0;
+        levelDuration = 0;
+    }
+    resetPlayer(); // so the intro cutscene shows the equipped outfit
     introFrame = 0;
     introParticles = [];
-    bowl = { x: 700, y: GROUND_Y - 60, visible: false, grabbed: false };
+    bowl = { x: 700, visible: false, grabbed: false };
     gameState = STATE.INTRO;
     tryStartMusic();
+}
+
+function bankCoins() {
+    const mult = DIFFICULTIES[difficultyIdx].coinMult;
+    const runCoins = player.coinScore + (playerCount === 2 ? player2.coinScore : 0);
+    lastBanked = Math.round(runCoins * mult);
+    saveData.bank += lastBanked;
+    persistSave();
+}
+
+function updateLevelProgress() {
+    levelTimeLeft--;
+    const elapsed = levelDuration - levelTimeLeft;
+    if (currentLevel === 10 && !boss && elapsed >= 300 * 60) spawnBoss();
+    if (levelTimeLeft <= 0) completeLevel();
+}
+
+function completeLevel() {
+    victory = currentLevel === 10;
+    if (boss) {
+        spawnExplosion(boss.x, boss.y);
+        spawnExplosion(boss.x - 45, boss.y + 25);
+        spawnExplosion(boss.x + 35, boss.y - 30);
+        playDeathSound();
+        boss = null;
+        rainbows.length = 0;
+    }
+    bankCoins();
+    if (currentLevel < THEMES.length && currentLevel + 1 > saveData.unlockedLevel) {
+        saveData.unlockedLevel = currentLevel + 1;
+        persistSave();
+    }
+    p1Thrusting = false;
+    p2Thrusting = false;
+    stopFireSound();
+    gameState = STATE.COMPLETE;
+    completeTimer = 0;
 }
 
 function resetGame() {
     gameState = STATE.MENU;
     adminMode = false;
+    menuGoto(chosenMode === 'campaign' ? 'levels' : 'main');
     bgMusic.pause();
     bgMusic.currentTime = 0;
-    musicStatus = 'blocked';
 }
 
 // ─── Dead State Update ────────────────────────────────────────────────────────
@@ -2164,6 +2791,9 @@ function renderFullScreen() {
     drawRamens();
     drawSauces();
     drawPeppers();
+    drawBoss();
+    drawRainbows();
+    drawWeather();
     particles.forEach(p => p.draw());
     if (playerCount === 2 && player2.alive) drawPepperFlamesBehind(player2);
     if (player.alive) drawPepperFlamesBehind(player);
@@ -2175,6 +2805,8 @@ function renderFullScreen() {
             ctx.globalAlpha = 0.35 + Math.abs(Math.sin(frameCount * 0.25)) * 0.55;
             drawCharacter(player2, false, 'idle');
             ctx.restore();
+        } else if (player2.permanentlyDead) {
+            drawCharacter(player2, false, 'idle');
         }
     }
     if (player.alive) {
@@ -2184,6 +2816,8 @@ function renderFullScreen() {
         ctx.globalAlpha = 0.35 + Math.abs(Math.sin(frameCount * 0.25)) * 0.55;
         drawCharacter(player, false, 'idle');
         ctx.restore();
+    } else if (player.permanentlyDead) {
+        drawCharacter(player, false, 'idle');
     }
     if (player.alive) drawPepperAura(player);
     if (playerCount === 2 && player2.alive) drawPepperAura(player2);
@@ -2193,12 +2827,16 @@ function renderFullScreen() {
         drawHUD(player, 'W', 0, CANVAS_W / 2);
         drawHUD(player2, '↑', CANVAS_W / 2, CANVAS_W / 2);
     }
+    drawLevelHUD();
 }
 
 function renderFullScreenDead() {
     drawBackground();
     drawObstacles();
     drawCoins();
+    drawBoss();
+    drawRainbows();
+    drawWeather();
     particles.forEach(p => p.draw());
     if (playerCount === 2) drawCharacter(player2, false, 'idle');
     drawCharacter(player, false, 'idle');
@@ -2208,7 +2846,7 @@ function renderFullScreenDead() {
 function drawAdminOverlay() {
     if (!adminMode) return;
     ctx.save();
-    const x = 8, y = CANVAS_H - 110, w = 210, h = 100;
+    const x = 8, y = CANVAS_H - 128, w = 210, h = 118;
     ctx.fillStyle = 'rgba(0,0,0,0.75)';
     roundRect(ctx, x, y, w, h, 8);
     ctx.fill();
@@ -2228,17 +2866,17 @@ function drawAdminOverlay() {
     ctx.fillText('[2]  Spawn Hot Sauce', x + 10, y + 60);
     ctx.fillStyle = '#FF2200';
     ctx.fillText('[3]  Spawn Chili Pepper', x + 10, y + 78);
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText('[G]  ∞ coins + unlock all', x + 10, y + 96);
 
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
     ctx.font = '11px Arial';
-    ctx.fillText('Press F to close', x + 10, y + 96);
+    ctx.fillText('Press F to close', x + 10, y + 114);
     ctx.restore();
 }
 
 // ─── Main Menu ────────────────────────────────────────────────────────────────
 function drawMenuBackground() {
-    menuScrollOffset = (menuScrollOffset + 2.5) % (CANVAS_W * 4);
-
     // Sky fill
     ctx.fillStyle = '#07071A';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
@@ -2395,7 +3033,34 @@ function drawMenuScientist(x, y, variant) {
     ctx.restore();
 }
 
+function pushBox(x, y, w, h, idx) {
+    menuBoxes.push({ x, y, w, h, idx });
+}
+
+function drawMenuBox(x, y, w, h, sel, label, sub, opts) {
+    opts = opts || {};
+    const color = opts.color || '#FF6600';
+    ctx.fillStyle = opts.disabled ? 'rgba(10,10,20,0.75)' : sel ? (opts.selColor || 'rgba(255,80,0,0.45)') : 'rgba(15,15,35,0.65)';
+    ctx.strokeStyle = opts.disabled ? '#222238' : sel ? color : '#2A2A50';
+    ctx.lineWidth = sel ? 3 : 1.5;
+    roundRect(ctx, x, y, w, h, 10);
+    ctx.fill();
+    ctx.stroke();
+    if (sel && !opts.disabled) { ctx.shadowBlur = 16; ctx.shadowColor = color; }
+    ctx.fillStyle = opts.disabled ? '#555566' : sel ? '#FFFFFF' : '#9999AA';
+    ctx.font = `bold ${sel ? (opts.fontSel || 19) : (opts.font || 16)}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x + w / 2, sub ? y + h / 2 - 3 : y + h / 2 + 6);
+    if (sub) {
+        ctx.font = `${sel ? 13 : 11}px Arial`;
+        ctx.fillStyle = opts.disabled ? '#444455' : sel ? '#FFDDBB' : '#555568';
+        ctx.fillText(sub, x + w / 2, y + h / 2 + 18);
+    }
+    ctx.shadowBlur = 0;
+}
+
 function drawMenu() {
+    menuBoxes = [];
     ctx.save();
     ctx.textAlign = 'center';
 
@@ -2403,71 +3068,143 @@ function drawMenu() {
     ctx.shadowBlur = 45;
     ctx.shadowColor = '#FF4400';
     ctx.fillStyle = '#FF2200';
-    ctx.font = 'bold 74px Arial';
-    ctx.fillText('SPICY RIDE', CANVAS_W / 2, 175);
+    ctx.font = 'bold 60px Arial';
+    ctx.fillText('SPICY RIDE', CANVAS_W / 2, 105);
     ctx.shadowBlur = 0;
     ctx.fillStyle = '#FF9900';
-    ctx.font = 'bold 26px Arial';
-    ctx.fillText('🌶  Buldak Edition  🌶', CANVAS_W / 2, 218);
+    ctx.font = 'bold 20px Arial';
+    ctx.fillText('🌶  Buldak Edition  🌶', CANVAS_W / 2, 138);
 
-    // Option boxes
-    const boxes = [
-        { label: '1 PLAYER',  sub: 'W  to fly',       x: CANVAS_W / 2 - 160, color: '#3355CC', selColor: 'rgba(51,85,204,0.75)',  idx: 0 },
-        { label: '2 PLAYERS', sub: 'W  +  ↑  to fly', x: CANVAS_W / 2 + 20,  color: '#CC3333', selColor: 'rgba(204,51,51,0.75)',   idx: 1 },
-    ];
-    const optY = 290, optW = 140, optH = 76;
+    // Coin bank (always visible)
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    roundRect(ctx, CANVAS_W - 172, 12, 158, 34, 8);
+    ctx.fill();
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText(`🪙 ${saveData.bank}`, CANVAS_W - 26, 35);
+    ctx.textAlign = 'center';
 
-    boxes.forEach(b => {
-        const sel = menuSelection === b.idx;
-        ctx.fillStyle = sel ? b.selColor : 'rgba(15,15,35,0.65)';
-        ctx.strokeStyle = sel ? b.color : '#2A2A50';
-        ctx.lineWidth = sel ? 3 : 1.5;
-        roundRect(ctx, b.x, optY, optW, optH, 10);
-        ctx.fill();
-        ctx.stroke();
+    // Back button on sub-screens
+    if (menuScreen !== 'main') {
+        drawMenuBox(14, 12, 92, 34, false, '< BACK', null, { font: 13 });
+        pushBox(14, 12, 92, 34, -1);
+    }
 
-        if (sel) { ctx.shadowBlur = 18; ctx.shadowColor = b.color; }
-        ctx.fillStyle = sel ? '#FFFFFF' : '#888899';
-        ctx.font = `bold ${sel ? 22 : 18}px Arial`;
-        ctx.fillText(b.label, b.x + optW / 2, optY + 33);
-        ctx.font = `${sel ? 14 : 12}px Arial`;
-        ctx.fillStyle = sel ? '#CCDDFF' : '#555568';
-        ctx.fillText(b.sub, b.x + optW / 2, optY + 56);
-        ctx.shadowBlur = 0;
-    });
+    const header = (txt) => {
+        ctx.fillStyle = '#FFCC66';
+        ctx.font = 'bold 20px Arial';
+        ctx.fillText(txt, CANVAS_W / 2, 185);
+    };
 
-    // Nav hint
-    ctx.fillStyle = 'rgba(200,200,220,0.5)';
+    if (menuScreen === 'main') {
+        const items = [
+            { label: 'CAMPAIGN', sub: '10 levels · new worlds · a boss', color: '#FF6600' },
+            { label: 'ENDLESS',  sub: 'fly forever on unlocked maps',    color: '#3355CC' },
+            { label: 'SHOP',     sub: 'spend coins on outfits',          color: '#FFD700' },
+        ];
+        items.forEach((it, i) => {
+            const x = CANVAS_W / 2 - 150, y = 205 + i * 88, w = 300, h = 70;
+            drawMenuBox(x, y, w, h, menuIndex === i, it.label, it.sub, { color: it.color, fontSel: 22, font: 18 });
+            pushBox(x, y, w, h, i);
+        });
+    } else if (menuScreen === 'levels' || menuScreen === 'maps') {
+        header(menuScreen === 'levels' ? 'SELECT LEVEL' : 'SELECT MAP');
+        const count = menuItemCount();
+        const bw = 128, bh = 86, gap = 14;
+        const cols = 5;
+        for (let i = 0; i < count; i++) {
+            const col = i % cols, row = Math.floor(i / cols);
+            const rowCount = Math.min(cols, count - row * cols);
+            const rowX0 = (CANVAS_W - rowCount * bw - (rowCount - 1) * gap) / 2;
+            const x = rowX0 + col * (bw + gap);
+            const y = 215 + row * (bh + 16);
+            if (menuScreen === 'levels') {
+                const locked = i + 1 > saveData.unlockedLevel;
+                drawMenuBox(x, y, bw, bh, menuIndex === i,
+                    locked ? '🔒' : `LEVEL ${i + 1}`,
+                    locked ? 'LOCKED' : `${THEMES[i].name} · ${i + 1} MIN`,
+                    { disabled: locked, font: 14, fontSel: 16 });
+            } else {
+                drawMenuBox(x, y, bw, bh, menuIndex === i, THEMES[i].name, 'endless', { font: 14, fontSel: 16, color: '#3355CC', selColor: 'rgba(51,85,204,0.5)' });
+            }
+            pushBox(x, y, bw, bh, i);
+        }
+        if (menuScreen === 'levels' && currentLevel !== 10 && saveData.unlockedLevel >= 10) {
+            ctx.fillStyle = '#FFD700';
+            ctx.font = 'bold 13px Arial';
+            ctx.fillText('Beat level 10 to defeat the RAINBOW FISH!', CANVAS_W / 2, 440);
+        }
+    } else if (menuScreen === 'difficulty') {
+        header('SELECT DIFFICULTY');
+        DIFFICULTIES.forEach((d, i) => {
+            const w = 180, h = 92;
+            const x = CANVAS_W / 2 - (w * 1.5 + 20) + i * (w + 20), y = 230;
+            const hearts = '♥'.repeat(d.lives);
+            drawMenuBox(x, y, w, h, menuIndex === i, d.label, `${hearts}  ·  coins ×${d.coinMult}`,
+                { color: i === 0 ? '#44CC44' : i === 1 ? '#FFAA00' : '#FF2222' });
+            pushBox(x, y, w, h, i);
+        });
+    } else if (menuScreen === 'players') {
+        header('PLAYERS');
+        const opts = [
+            { label: '1 PLAYER',  sub: 'hold  W  to fly',      color: '#3355CC', selColor: 'rgba(51,85,204,0.5)' },
+            { label: '2 PLAYERS', sub: 'W  +  ↑  to fly',      color: '#CC3333', selColor: 'rgba(204,51,51,0.5)' },
+        ];
+        opts.forEach((o, i) => {
+            const w = 170, h = 84;
+            const x = CANVAS_W / 2 - (w + 15) + i * (w + 30), y = 235;
+            drawMenuBox(x, y, w, h, menuIndex === i, o.label, o.sub, o);
+            pushBox(x, y, w, h, i);
+        });
+    } else if (menuScreen === 'shop') {
+        header('OUTFIT SHOP');
+        OUTFITS.forEach((o, i) => {
+            const w = 400, h = 60;
+            const x = CANVAS_W / 2 - w / 2, y = 205 + i * 72;
+            const owned = saveData.outfits.includes(o.id);
+            const equipped = saveData.equipped === o.id;
+            const sub = equipped ? '★ EQUIPPED' : owned ? 'owned — select to equip' : `${o.price} coins`;
+            const affordable = owned || saveData.bank >= o.price;
+            drawMenuBox(x, y, w, h, menuIndex === i, o.name, sub, { disabled: !affordable, color: o.shirt });
+            // outfit color swatch
+            ctx.fillStyle = o.shirt;
+            ctx.strokeStyle = '#111';
+            roundRect(ctx, x + 14, y + 15, 30, 30, 6);
+            ctx.fill();
+            ctx.stroke();
+            pushBox(x, y, w, h, i);
+        });
+    }
+
+    // Hints
+    ctx.fillStyle = 'rgba(200,200,220,0.55)';
     ctx.font = '13px Arial';
-    ctx.fillText('← → to select', CANVAS_W / 2, optY + optH + 26);
-
-    // Blinking PRESS ENTER
-    const blink = Math.sin(frameCount * 0.09) > 0;
-    ctx.fillStyle = blink ? '#FFD700' : '#FF8800';
-    ctx.font = 'bold 19px Arial';
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = blink ? '#FFD700' : '#FF4400';
-    ctx.fillText('PRESS  ENTER  TO  START', CANVAS_W / 2, optY + optH + 58);
-    ctx.shadowBlur = 0;
+    ctx.fillText(
+        'arrows: select   ·   ENTER: confirm' + (menuScreen !== 'main' ? '   ·   ESC: back' : ''),
+        CANVAS_W / 2, CANVAS_H - 40);
 
     ctx.restore();
 }
 
 // ─── Main Game Loop ───────────────────────────────────────────────────────────
-function loop() {
+// Fixed 60 Hz timestep so game speed is identical on every monitor refresh rate.
+const STEP_MS = 1000 / 60;
+const MAX_FRAME_MS = 250; // cap catch-up after a background-tab pause
+let lastTime = performance.now();
+let stepAccumulator = 0;
+
+function update() {
     frameCount++;
 
     if (gameState === STATE.MENU) {
-        drawMenuBackground();
-        drawMenu();
+        menuScrollOffset = (menuScrollOffset + 2.5) % (CANVAS_W * 4);
     } else if (gameState === STATE.INTRO) {
         updateIntro();
-        drawIntro();
-        drawMusicPrompt();
     } else if (gameState === STATE.PLAYING) {
-        // scroll
+        // scroll (speed ramps up but caps, so long campaign levels stay fair)
         scrollOffset += scrollSpeed;
-        scrollSpeed += 0.0015;
+        scrollSpeed = Math.min(scrollSpeed + 0.0015, SCROLL_SPEED_BASE + 5);
         distanceScore = Math.floor(scrollOffset / 60);
         if (!player.permanentlyDead) player.distanceScore = distanceScore;
         if (playerCount === 2 && !player2.permanentlyDead) player2.distanceScore = distanceScore;
@@ -2476,6 +3213,8 @@ function loop() {
         if (playerCount === 2) updatePlayer(player2, p2Thrusting);
         updateRespawn(player);
         if (playerCount === 2) updateRespawn(player2);
+        if (player.permanentlyDead) updateDeadPlayer(player);
+        if (playerCount === 2 && player2.permanentlyDead) updateDeadPlayer(player2);
         updateGroundFire();
 
         // obstacle & coin spawning
@@ -2511,26 +3250,62 @@ function loop() {
         updateRamens();
         updateSauces();
         updatePeppers();
+        updateWeather();
+        if (boss) updateBoss();
+        updateRainbows();
         checkCollisions();
 
         particles = particles.filter(p => { p.update(); return !p.dead; });
+        hudPromptAlpha = Math.max(0, hudPromptAlpha - 0.005);
 
-        renderFullScreen();
-        drawAdminOverlay();
-        drawMusicPrompt();
-        hudPromptAlpha -= 0.005;
-
+        // campaign timer / boss spawn / level completion — last so a kill this
+        // frame is seen before the level is declared complete
+        if (gameState === STATE.PLAYING && currentLevel > 0) updateLevelProgress();
     } else if (gameState === STATE.DEAD) {
         scrollOffset += scrollSpeed * 0.3;
         updateDead();
+    } else if (gameState === STATE.COMPLETE) {
+        completeTimer++;
+        scrollOffset += scrollSpeed * 0.3;
+        particles = particles.filter(p => { p.update(); return !p.dead; });
+    }
+}
 
+function render() {
+    if (gameState === STATE.MENU) {
+        drawMenuBackground();
+        drawMenu();
+        drawMusicPrompt();
+    } else if (gameState === STATE.INTRO) {
+        drawIntro();
+        drawMusicPrompt();
+    } else if (gameState === STATE.PLAYING) {
+        renderFullScreen();
+        drawAdminOverlay();
+        drawMusicPrompt();
+    } else if (gameState === STATE.DEAD) {
         renderFullScreenDead();
         drawGameOver();
         drawMusicPrompt();
+    } else if (gameState === STATE.COMPLETE) {
+        renderFullScreenDead();
+        drawLevelComplete();
+        drawMusicPrompt();
     }
+    drawTestingBadge();
+}
 
+function loop(now) {
+    stepAccumulator += Math.min(MAX_FRAME_MS, now - lastTime);
+    lastTime = now;
+    while (stepAccumulator >= STEP_MS) {
+        update();
+        stepAccumulator -= STEP_MS;
+    }
+    render();
     requestAnimationFrame(loop);
 }
 
 // ─── Start ────────────────────────────────────────────────────────────────────
-loop();
+loadSave();
+requestAnimationFrame(loop);
