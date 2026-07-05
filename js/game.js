@@ -169,7 +169,8 @@ let currentThemeIdx = 0;
 function theme() { return THEMES[currentThemeIdx]; }
 
 // ─── Game State ───────────────────────────────────────────────────────────────
-const STATE = { MENU: 0, INTRO: 1, PLAYING: 2, DEAD: 3, COMPLETE: 4 };
+const STATE = { MENU: 0, INTRO: 1, PLAYING: 2, DEAD: 3, COMPLETE: 4, STORY: 5 };
+let storyFrame = 0;
 let gameState = STATE.MENU;
 let playerCount = 1;
 let menuScreen = 'main'; // main | levels | maps | difficulty | players | shop
@@ -260,7 +261,8 @@ window.addEventListener('keydown', e => {
     }
     if (e.code === 'KeyW') {
         e.preventDefault();
-        if (gameState === STATE.INTRO) startGame();
+        if (gameState === STATE.STORY) startIntro();
+        else if (gameState === STATE.INTRO) startGame();
         if (gameState === STATE.DEAD && deadTimer > 90) resetGame();
     }
     if (e.code === 'ArrowUp') {
@@ -270,7 +272,8 @@ window.addEventListener('keydown', e => {
     }
     if (e.code === 'Space' || e.code === 'Enter') {
         e.preventDefault();
-        if (gameState === STATE.INTRO) startGame();
+        if (gameState === STATE.STORY) startIntro();
+        else if (gameState === STATE.INTRO) startGame();
         if (gameState === STATE.DEAD && deadTimer > 90) resetGame();
     }
     if (e.code === 'KeyF' && gameState === STATE.PLAYING) {
@@ -338,6 +341,7 @@ canvas.addEventListener('touchstart', e => {
         handleMenuPointer(mx, my);
         return;
     }
+    if (gameState === STATE.STORY) { startIntro(); return; }
     if (gameState === STATE.INTRO) { startGame(); return; }
     if (gameState === STATE.PLAYING) { p1Thrusting = true; updateFireSound(); }
     if (gameState === STATE.DEAD && deadTimer > 90) resetGame();
@@ -2247,7 +2251,7 @@ function checkCollisions() {
 function killPlayerObj(pl) {
     if (!pl.alive) return;
     pl.alive = false;
-    pl.lives--;
+    if (!testingMode) pl.lives--; // G testing mode: infinite hearts
     if (pl === player) { p1Thrusting = false; p1Keys.clear(); }
     if (pl === player2) p2Thrusting = false;
     updateFireSound();
@@ -2282,11 +2286,17 @@ function drawHUD(pl, keyHint, xOff, hw) {
     ctx.fillText(`Dist: ${pl.distanceScore}m`, xOff + 16, 28);
     ctx.fillStyle = '#FFD700';
     ctx.fillText(`Coins: ${pl.coinScore}`, xOff + 16, 48);
-    // life hearts
-    ctx.font = '15px Arial';
-    for (let i = 0; i < (pl.maxLives || 3); i++) {
-        ctx.fillStyle = i < pl.lives ? '#FF2244' : '#553333';
-        ctx.fillText('♥', xOff + 16 + i * 20, 68);
+    // life hearts (testing mode = infinite)
+    if (testingMode) {
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 17px Arial';
+        ctx.fillText('∞ ♥', xOff + 16, 68);
+    } else {
+        ctx.font = '15px Arial';
+        for (let i = 0; i < (pl.maxLives || 3); i++) {
+            ctx.fillStyle = i < pl.lives ? '#FF2244' : '#553333';
+            ctx.fillText('♥', xOff + 16 + i * 20, 68);
+        }
     }
 
     // player label centred in this player's half
@@ -2562,6 +2572,158 @@ function drawGameOver() {
     ctx.restore();
 }
 
+// ─── Story Cutscene (level 1: the ramen shop) ─────────────────────────────────
+function drawSpeechBubble(cx, bottomY, text) {
+    ctx.save();
+    ctx.font = 'bold 15px Arial';
+    const w = ctx.measureText(text).width + 26;
+    const h = 34;
+    const x = Math.max(8, Math.min(CANVAS_W - w - 8, cx - w / 2));
+    const y = bottomY - h - 14;
+    ctx.fillStyle = 'white';
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 2;
+    // tail first, bubble covers the seam
+    ctx.beginPath();
+    ctx.moveTo(cx - 7, y + h - 4);
+    ctx.lineTo(cx + 7, y + h - 4);
+    ctx.lineTo(cx, bottomY - 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    roundRect(ctx, x, y, w, h, 9);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#222';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, x + w / 2, y + 22);
+    ctx.restore();
+}
+
+function storyCharObj(x, shirtColor, legAngle, y) {
+    return {
+        x, y: y === undefined ? GROUND_Y - 54 : y, width: 36, height: 54,
+        legAngle, headRed: 0, crumpled: false,
+        pepperTimer: 0, invincibleTimer: 0,
+        shirtColor, armor: null,
+    };
+}
+
+function updateStory() {
+    storyFrame++;
+    if (storyFrame > 390) startIntro();
+}
+
+function drawStory() {
+    const f = storyFrame;
+    const mcX = Math.min(400, -60 + f * 5);           // hero walks in from the left
+    const walking = mcX < 400;
+
+    // ── Shop interior ──
+    ctx.fillStyle = '#241634';
+    ctx.fillRect(0, 0, CANVAS_W, GROUND_Y);
+    // floor
+    const fg = ctx.createLinearGradient(0, GROUND_Y, 0, CANVAS_H);
+    fg.addColorStop(0, '#1A1024');
+    fg.addColorStop(1, '#0C0814');
+    ctx.fillStyle = fg;
+    ctx.fillRect(0, GROUND_Y, CANVAS_W, CANVAS_H - GROUND_Y);
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    for (let i = 0; i < CANVAS_W / 80 + 1; i++) ctx.strokeRect(i * 80, GROUND_Y, 80, 40);
+
+    // hanging shop sign
+    ctx.fillStyle = '#8A1010';
+    roundRect(ctx, CANVAS_W / 2 - 170, 34, 340, 52, 10);
+    ctx.fill();
+    ctx.strokeStyle = '#FFCC66';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fillStyle = '#FFDD66';
+    ctx.font = 'bold 24px Arial';
+    ctx.textAlign = 'center';
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = '#FF6600';
+    ctx.fillText('🌶  SPICY RAMEN SHOP  🌶', CANVAS_W / 2, 68);
+    ctx.shadowBlur = 0;
+
+    // shelves with bowls and sauce bottles
+    for (let s = 0; s < 2; s++) {
+        const sy = 150 + s * 85;
+        ctx.fillStyle = '#4A2E14';
+        ctx.fillRect(50, sy, 250, 10);
+        for (let b = 0; b < 4; b++) {
+            const bx = 85 + b * 60;
+            if ((b + s) % 2 === 0) {
+                ctx.fillStyle = '#CC2222';
+                ctx.beginPath();
+                ctx.arc(bx, sy - 7, 13, Math.PI, 0);
+                ctx.fill();
+            } else {
+                ctx.fillStyle = '#AA1111';
+                ctx.fillRect(bx - 6, sy - 26, 12, 26);
+                ctx.fillStyle = '#FF6600';
+                ctx.fillRect(bx - 4, sy - 32, 8, 6);
+            }
+        }
+    }
+
+    // lantern glow
+    const lg = ctx.createRadialGradient(CANVAS_W / 2, 200, 0, CANVAS_W / 2, 200, 380);
+    lg.addColorStop(0, 'rgba(255,150,60,0.10)');
+    lg.addColorStop(1, 'rgba(255,150,60,0)');
+    ctx.fillStyle = lg;
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    // ── Shopkeeper — raised so head and torso show above the counter,
+    //    which is drawn after him and hides his legs ──
+    drawCharacter(storyCharObj(590, '#EEEEEE', 0, GROUND_Y - 96), false, 'idle');
+
+    // counter
+    ctx.fillStyle = '#6A421E';
+    ctx.fillRect(510, GROUND_Y - 48, 250, 48);
+    ctx.fillStyle = '#8A5A2A';
+    ctx.fillRect(504, GROUND_Y - 56, 262, 12);
+    // steaming bowl on the counter
+    drawRamenBowl(560, GROUND_Y - 92);
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) {
+        const sx = 548 + i * 12;
+        const wob = Math.sin(frameCount * 0.1 + i * 2) * 4;
+        ctx.beginPath();
+        ctx.moveTo(sx, GROUND_Y - 100);
+        ctx.quadraticCurveTo(sx + wob, GROUND_Y - 115, sx, GROUND_Y - 130);
+        ctx.stroke();
+    }
+
+    // ── Main character walks in (wearing his equipped armour) ──
+    const legAngle = walking ? Math.sin(f * 0.35) * 0.55 : 0;
+    const mc = storyCharObj(mcX, player.shirtColor, legAngle);
+    mc.armor = player.armor;
+    drawCharacter(mc, false, 'idle');
+
+    // ── Dialogue ──
+    const mcHeadX = mcX + 18, mcTop = GROUND_Y - 54 - 4;
+    const keepHeadX = 590 + 18, keepTop = GROUND_Y - 96 - 4;
+    if (f >= 115 && f < 195) drawSpeechBubble(mcHeadX, mcTop, 'I want the SPICIEST ramen you have!');
+    else if (f >= 195 && f < 270) drawSpeechBubble(keepHeadX, keepTop, 'Are you sure...?');
+    else if (f >= 270 && f < 345) drawSpeechBubble(mcHeadX, mcTop, 'OF COURSE!');
+
+    // skip hint
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = '13px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('SPACE to skip', CANVAS_W / 2, CANVAS_H - 16);
+
+    // fade out into the eating intro
+    if (f >= 355) {
+        ctx.fillStyle = '#000';
+        ctx.globalAlpha = Math.min(1, (f - 355) / 30);
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        ctx.globalAlpha = 1;
+    }
+}
+
 // ─── Intro Cutscene ───────────────────────────────────────────────────────────
 function updateIntro() {
     introFrame++;
@@ -2815,12 +2977,22 @@ function startRun() {
         currentLevel = 0;
         levelDuration = 0;
     }
-    resetPlayer(); // so the intro cutscene shows the equipped outfit
+    resetPlayer(); // so the cutscenes show the equipped armour
+    if (chosenMode === 'campaign' && chosenLevel === 1) {
+        // level 1 opens with the ramen-shop story scene
+        storyFrame = 0;
+        gameState = STATE.STORY;
+    } else {
+        startIntro();
+    }
+    tryStartMusic();
+}
+
+function startIntro() {
     introFrame = 0;
     introParticles = [];
     bowl = { x: 700, visible: false, grabbed: false };
     gameState = STATE.INTRO;
-    tryStartMusic();
 }
 
 function bankCoins() {
@@ -2985,7 +3157,7 @@ function drawAdminOverlay() {
     ctx.fillStyle = '#FF2200';
     ctx.fillText('[3]  Spawn Chili Pepper', x + 10, y + 78);
     ctx.fillStyle = '#FFD700';
-    ctx.fillText('[G]  ∞ coins + unlock all', x + 10, y + 96);
+    ctx.fillText('[G]  ∞ coins + ∞ hearts + unlock all', x + 10, y + 96);
 
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
     ctx.font = '11px Arial';
@@ -3317,6 +3489,8 @@ function update() {
 
     if (gameState === STATE.MENU) {
         menuScrollOffset = (menuScrollOffset + 2.5) % (CANVAS_W * 4);
+    } else if (gameState === STATE.STORY) {
+        updateStory();
     } else if (gameState === STATE.INTRO) {
         updateIntro();
     } else if (gameState === STATE.PLAYING) {
@@ -3393,6 +3567,9 @@ function render() {
     if (gameState === STATE.MENU) {
         drawMenuBackground();
         drawMenu();
+        drawMusicPrompt();
+    } else if (gameState === STATE.STORY) {
+        drawStory();
         drawMusicPrompt();
     } else if (gameState === STATE.INTRO) {
         drawIntro();

@@ -82,8 +82,8 @@ pads on the character in the set's colour:
 ## 6. Admin / Test Mode
 
 - The game already has an admin mode on **F** (spawns ramen / sauce / pepper).
-- Add: pressing **G** gives **infinite coins** and **unlocks all campaign levels** —
-  for testing the shop and levels.
+- Add: pressing **G** gives **infinite coins**, **infinite hearts** and **unlocks
+  all campaign levels** — for testing the shop and levels.
 - *Suggestion:* show a "TESTING MODE" badge on screen while it's active, and don't
   save admin-earned coins/unlocks to the real save file, so testing can't spoil a
   normal playthrough.
