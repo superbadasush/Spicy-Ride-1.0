@@ -145,28 +145,36 @@ function equippedShirt() {
 // Campaign level N uses THEMES[N-1]; endless mode picks any unlocked theme.
 const THEMES = [
     { name: 'SHOP',    sky: '#241634', indoor: true,  wall: '#2A1A3C', wallLine: '#3A2650', deco: 'shop',
-      floor1: '#1A1024', floor2: '#0C0814', belt1: '#3A2618', belt2: '#2A1A10', haz1: '#3E1A00', haz2: '#200E00', glow: '#FF6600', effect: null,      stars: false },
+      floor1: '#1A1024', floor2: '#0C0814', haz1: '#3E1A00', haz2: '#200E00', glow: '#FF6600', effect: null,      stars: false },
     { name: 'CITY',    sky: '#0A0A2E', indoor: false, wall: '#101038', wallLine: '#1A1A4A', deco: 'city',
-      floor1: '#14141E', floor2: '#0A0A12', belt1: '#26263A', belt2: '#1C1C2E', haz1: '#282800', haz2: '#141400', glow: '#FFCC00', effect: null,      stars: true  },
+      floor1: '#14141E', floor2: '#0A0A12', haz1: '#282800', haz2: '#141400', glow: '#FFCC00', effect: null,      stars: true  },
     { name: 'SNOW',    sky: '#1A2A4A', indoor: false, wall: '#223A5E', wallLine: '#2E4A72', deco: 'hills',
-      floor1: '#C8D8E8', floor2: '#8FA8C0', belt1: '#E8F2FA', belt2: '#C8D8E8', haz1: '#4A6A8A', haz2: '#324A62', glow: '#AADDFF', effect: 'snow',    stars: false },
+      floor1: '#C8D8E8', floor2: '#8FA8C0', haz1: '#4A6A8A', haz2: '#324A62', glow: '#AADDFF', effect: 'snow',    stars: false },
     { name: 'DESERT',  sky: '#B25A1E', indoor: false, wall: '#8A4218', wallLine: '#A0521E', deco: 'dunes',
-      floor1: '#C08A3E', floor2: '#8A5A24', belt1: '#D0A050', belt2: '#B08038', haz1: '#5A3A10', haz2: '#3E2808', glow: '#FFCC66', effect: null,      stars: false },
+      floor1: '#C08A3E', floor2: '#8A5A24', haz1: '#5A3A10', haz2: '#3E2808', glow: '#FFCC66', effect: null,      stars: false },
     { name: 'OCEAN',   sky: '#04284A', indoor: false, wall: '#063A64', wallLine: '#0A4A7A', deco: 'waves',
-      floor1: '#0A3A5E', floor2: '#052238', belt1: '#12507A', belt2: '#0C3A5A', haz1: '#083048', haz2: '#052030', glow: '#44CCFF', effect: 'bubbles', stars: false },
+      floor1: '#0A3A5E', floor2: '#052238', haz1: '#083048', haz2: '#052030', glow: '#44CCFF', effect: 'bubbles', stars: false },
     { name: 'LAVA',    sky: '#1E0404', indoor: false, wall: '#320A06', wallLine: '#48120A', deco: 'volcano',
-      floor1: '#2A0E08', floor2: '#180604', belt1: '#3E1810', belt2: '#2A0E08', haz1: '#FF3300', haz2: '#661100', glow: '#FF3300', effect: 'embers',  stars: false },
-    { name: 'ACID',    sky: '#04140A', indoor: true,  wall: '#082212', wallLine: '#0E3A1E', deco: 'lab',
-      floor1: '#0A1E12', floor2: '#04100A', belt1: '#143822', belt2: '#0C2416', haz1: '#1E4A00', haz2: '#0E2400', glow: '#44FF44', effect: 'bubbles', stars: false },
+      floor1: '#2A0E08', floor2: '#180604', haz1: '#FF3300', haz2: '#661100', glow: '#FF3300', effect: 'embers',  stars: false },
+    { name: 'ACID',    sky: '#04140A', indoor: false, wall: '#082212', wallLine: '#0E3A1E', deco: 'jar',
+      floor1: '#0A1E12', floor2: '#04100A', haz1: '#1E4A00', haz2: '#0E2400', glow: '#44FF44', effect: 'bubbles', stars: false },
     { name: 'SPACE STATION', sky: '#0A0A16', indoor: true, wall: '#14141F', wallLine: '#26263A', deco: 'station',
-      floor1: '#16161E', floor2: '#0A0A10', belt1: '#2A2A3A', belt2: '#1E1E2A', haz1: '#2A1A50', haz2: '#160C2C', glow: '#8877FF', effect: null,      stars: false },
+      floor1: '#16161E', floor2: '#0A0A10', haz1: '#2A1A50', haz2: '#160C2C', glow: '#8877FF', effect: null,      stars: false },
     { name: 'SPACE',   sky: '#020210', indoor: false, wall: '#060620', wallLine: '#0E0E30', deco: null,
-      floor1: '#101018', floor2: '#08080E', belt1: '#22222E', belt2: '#181822', haz1: '#101040', haz2: '#080820', glow: '#8844FF', effect: null,      stars: true  },
+      floor1: '#101018', floor2: '#08080E', haz1: '#101040', haz2: '#080820', glow: '#8844FF', effect: null,      stars: true  },
     { name: 'MOON',    sky: '#04040E', indoor: false, wall: '#0A0A18', wallLine: '#14142A', deco: 'craters',
-      floor1: '#8A8A96', floor2: '#5A5A66', belt1: '#A2A2AE', belt2: '#8A8A96', haz1: '#3A3A46', haz2: '#26262E', glow: '#CCCCFF', effect: null,      stars: true  },
+      floor1: '#8A8A96', floor2: '#5A5A66', haz1: '#3A3A46', haz2: '#26262E', glow: '#CCCCFF', effect: null,      stars: true  },
 ];
 let currentThemeIdx = 0;
 function theme() { return THEMES[currentThemeIdx]; }
+
+// Environment gear the character wears on certain maps
+function envGear() {
+    const n = theme().name;
+    if (n === 'OCEAN') return 'diving';
+    if (n === 'MOON' || n === 'SPACE') return 'space';
+    return null;
+}
 
 // ─── Game State ───────────────────────────────────────────────────────────────
 const STATE = { MENU: 0, INTRO: 1, PLAYING: 2, DEAD: 3, COMPLETE: 4, STORY: 5, OUTRO: 6, VICTORY_WAIT: 7 };
@@ -422,7 +430,7 @@ function updateGroundFire() {
         : [[player, p1Thrusting]];
     for (const [pl, isThrust] of activePlayers) {
         const onGround = pl.y >= GROUND_Y - pl.height - 2;
-        if (isThrust && pl.alive && !onGround && frameCount % 6 === 0) {
+        if (isThrust && pl.alive && !onGround && frameCount % 6 === 0 && envGear() !== 'diving') {
             groundFireTrail.push({ x: pl.x + pl.width / 2, life: 90 });
         }
     }
@@ -459,6 +467,20 @@ function drawGroundFire() {
         ctx.fill();
         ctx.restore();
     });
+}
+
+function spawnSwimBubbles(px, py) {
+    for (let i = 0; i < 3; i++) {
+        particles.push(new Particle(
+            px + (Math.random() - 0.5) * 8,
+            py + (Math.random() - 0.5) * 8,
+            -1 - Math.random() * 1.5,
+            -(0.5 + Math.random() * 1.5),
+            2 + Math.random() * 3,
+            ['rgba(170,220,255,0.8)', 'rgba(225,245,255,0.7)'][Math.floor(Math.random() * 2)],
+            20 + Math.random() * 15
+        ));
+    }
 }
 
 function spawnButtFire(px, py) {
@@ -605,11 +627,16 @@ function updatePlayer(pl, isThrust) {
         pl.vy = 0;
     }
     pl.legAngle = Math.sin(frameCount * 0.25) * 0.5;
-    if (canThrust) spawnButtFire(pl.x + 2, pl.y + pl.height - 8);
+    if (canThrust) {
+        // underwater he swims — bubbles instead of a fire trail
+        if (envGear() === 'diving') spawnSwimBubbles(pl.x + 2, pl.y + pl.height - 8);
+        else spawnButtFire(pl.x + 2, pl.y + pl.height - 8);
+    }
 
     if (pl.pepperTimer > 0) {
         pl.pepperTimer--;
         if (frameCount % 2 === 0) {
+            const shielded = envGear() === 'diving';
             const ang = Math.random() * Math.PI * 2;
             const rad = 22 + Math.random() * 10;
             particles.push(new Particle(
@@ -617,7 +644,9 @@ function updatePlayer(pl, isThrust) {
                 pl.y + pl.height / 2 + Math.sin(ang) * rad,
                 Math.cos(ang) * 1.5, Math.sin(ang) * 1.5 - 1,
                 3 + Math.random() * 4,
-                ['#FF2200', '#FF6600', '#FFCC00'][Math.floor(Math.random() * 3)],
+                shielded
+                    ? ['rgba(150,225,255,0.8)', 'rgba(220,245,255,0.7)', 'rgba(100,200,255,0.8)'][Math.floor(Math.random() * 3)]
+                    : ['#FF2200', '#FF6600', '#FFCC00'][Math.floor(Math.random() * 3)],
                 14
             ));
         }
@@ -633,7 +662,9 @@ function drawCharacter(pl, isThrust, introState) {
     const bodyTop = pl.y;
     const bodyH = pl.height * 0.55;
     const headR = 16;
-    const onFire = pl.pepperTimer > 0;
+    const gear = pl.noGear ? null : envGear();
+    // underwater the chili can't burn — it grants a bubble shield instead
+    const onFire = pl.pepperTimer > 0 && gear !== 'diving';
 
     const skinColor = onFire
         ? `rgb(255,${Math.max(70, 120 + Math.round(Math.sin(frameCount * 0.12) * 25))},40)`
@@ -641,6 +672,15 @@ function drawCharacter(pl, isThrust, introState) {
             ? `rgb(${Math.min(255, 220 + pl.headRed * 35)},${Math.max(60, 160 - pl.headRed * 50)},${Math.max(60, 130 - pl.headRed * 40)})`
             : '#F0C080';
     const shirtCol = pl.shirtColor || '#3355CC';
+
+    // diving tank on the back
+    if (gear === 'diving') {
+        ctx.fillStyle = '#C8D4DC';
+        roundRect(ctx, pl.x - 9, bodyTop + headR + 3, 10, 22, 5);
+        ctx.fill();
+        ctx.fillStyle = '#889AA6';
+        ctx.fillRect(pl.x - 6, bodyTop + headR - 1, 4, 5);
+    }
 
     // shirt — a proper top covering the whole torso
     if (onFire) {
@@ -708,39 +748,42 @@ function drawCharacter(pl, isThrust, introState) {
         }
     }
 
-    // legs — jeans with shoes
+    // legs — jeans with shoes (flippers and a flutter kick when diving)
     const pantsCol = onFire ? '#661100' : '#2B3F66';
     const shoeCol = '#221408';
+    const footCol = gear === 'diving' ? '#1E7A8C' : shoeCol;
+    const footW = gear === 'diving' ? 11 : 7;
     if (!pl.crumpled) {
         const legTop = bodyTop + headR + bodyH - 4;
         const legLen = pl.height * 0.35;
+        const swimKick = gear === 'diving' && isThrust ? Math.sin(frameCount * 0.45) * 0.55 : null;
         ctx.strokeStyle = pantsCol;
         ctx.lineWidth = 8;
         ctx.lineCap = 'round';
         // left leg
         ctx.save();
         ctx.translate(cx - 7, legTop);
-        ctx.rotate(isThrust ? 0.3 : pl.legAngle);
+        ctx.rotate(swimKick !== null ? swimKick : (isThrust ? 0.3 : pl.legAngle));
         ctx.beginPath();
         ctx.moveTo(0, 0);
         ctx.lineTo(0, legLen);
         ctx.stroke();
-        ctx.fillStyle = shoeCol;
+        ctx.fillStyle = footCol;
         ctx.beginPath();
-        ctx.ellipse(2, legLen + 3, 7, 4, 0, 0, Math.PI * 2);
+        ctx.ellipse(2, legLen + 3, footW, 4, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
         // right leg
         ctx.save();
         ctx.translate(cx + 7, legTop);
-        ctx.rotate(isThrust ? -0.3 : -pl.legAngle);
+        ctx.rotate(swimKick !== null ? -swimKick : (isThrust ? -0.3 : -pl.legAngle));
         ctx.beginPath();
         ctx.moveTo(0, 0);
         ctx.lineTo(0, legLen);
         ctx.stroke();
-        ctx.fillStyle = shoeCol;
+        ctx.fillStyle = footCol;
         ctx.beginPath();
-        ctx.ellipse(2, legLen + 3, 7, 4, 0, 0, Math.PI * 2);
+        ctx.ellipse(2, legLen + 3, footW, 4, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
     } else {
@@ -779,6 +822,12 @@ function drawCharacter(pl, isThrust, introState) {
     } else {
         handX = pl.x + pl.width + 16;
         handY = bodyTop + headR + 28;
+    }
+    if (gear === 'diving' && isThrust && !pl.crumpled) {
+        // swim stroke — the arm wheels around
+        const a = frameCount * 0.35;
+        handX = pl.x + pl.width + Math.cos(a) * 16;
+        handY = bodyTop + headR + 12 + Math.sin(a) * 14;
     }
     // right arm
     ctx.beginPath();
@@ -877,6 +926,24 @@ function drawCharacter(pl, isThrust, introState) {
         ctx.fill();
     }
 
+    // dive mask over the eyes
+    if (gear === 'diving') {
+        ctx.fillStyle = 'rgba(150,220,255,0.25)';
+        ctx.beginPath();
+        ctx.ellipse(hx, hy - 2, 12.5, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#1A2A33';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        // strap
+        ctx.beginPath();
+        ctx.moveTo(hx - 12.5, hy - 2);
+        ctx.lineTo(hx - headR, hy - 3);
+        ctx.moveTo(hx + 12.5, hy - 2);
+        ctx.lineTo(hx + headR, hy - 3);
+        ctx.stroke();
+    }
+
     // mouth
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
@@ -944,6 +1011,27 @@ function drawCharacter(pl, isThrust, introState) {
                 ctx.stroke();
             }
         }
+    }
+
+    // space helmet — glass dome over the whole head
+    if (gear === 'space') {
+        ctx.fillStyle = 'rgba(160,220,255,0.18)';
+        ctx.beginPath();
+        ctx.arc(hx, hy - 1, headR + 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(220,240,255,0.8)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // glass shine
+        ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(hx - 5, hy - 6, headR - 2, Math.PI * 1.05, Math.PI * 1.45);
+        ctx.stroke();
+        // metal neck ring
+        ctx.fillStyle = '#8899AA';
+        roundRect(ctx, hx - 12, hy + headR + 1, 24, 5, 2);
+        ctx.fill();
     }
 
     ctx.restore();
@@ -1017,6 +1105,29 @@ function drawRamenBowl(bx, by) {
 }
 
 // ─── Background (themed per environment) ──────────────────────────────────────
+function drawBgFish(x, y, s, i) {
+    const wig = Math.sin(frameCount * 0.25 + i * 1.7) * 4 * s;
+    ctx.save();
+    ctx.fillStyle = ['rgba(16,54,92,0.75)', 'rgba(24,74,116,0.7)', 'rgba(44,96,138,0.65)'][i % 3];
+    // body (swims left)
+    ctx.beginPath();
+    ctx.ellipse(x, y, 15 * s, 7.5 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // wiggling tail
+    ctx.beginPath();
+    ctx.moveTo(x + 12 * s, y);
+    ctx.lineTo(x + 24 * s, y - 8 * s + wig);
+    ctx.lineTo(x + 24 * s, y + 8 * s + wig);
+    ctx.closePath();
+    ctx.fill();
+    // eye
+    ctx.fillStyle = 'rgba(220,240,255,0.8)';
+    ctx.beginPath();
+    ctx.arc(x - 8 * s, y - 1.5 * s, 1.8 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+}
+
 function drawBackground() {
     const th = theme();
 
@@ -1210,6 +1321,91 @@ function drawBackground() {
             }
         }
     } else {
+        if (th.deco === 'dunes') {
+            // hazy desert sky + blazing sun
+            const dg = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+            dg.addColorStop(0, '#C86A22');
+            dg.addColorStop(0.7, '#B25A1E');
+            dg.addColorStop(1, '#D8904A');
+            ctx.fillStyle = dg;
+            ctx.fillRect(0, 0, CANVAS_W, GROUND_Y);
+            ctx.save();
+            ctx.fillStyle = '#FFE9A0';
+            ctx.shadowBlur = 50;
+            ctx.shadowColor = '#FFD060';
+            ctx.beginPath();
+            ctx.arc(620, 110, 46, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+        if (th.deco === 'waves') {
+            // fish swimming across the deep, each with its own depth and pace
+            const span = CANVAS_W + 100;
+            for (let i = 0; i < 7; i++) {
+                const h1 = Math.sin(i * 91.7 + 47.3) * 43758.5453;
+                const r1 = h1 - Math.floor(h1);
+                const swim = scrollOffset * (0.25 + r1 * 0.2) + frameCount * (0.4 + r1 * 0.8);
+                const fx = ((r1 * span - swim) % span + span) % span - 50;
+                const fy = 110 + ((i * 137) % 5) * 58 + Math.sin(frameCount * 0.05 + i * 2.1) * 9;
+                drawBgFish(fx, fy, 0.7 + r1 * 0.9, i);
+            }
+        }
+        if (th.deco === 'volcano') {
+            // hot sky that pulses with the eruptions
+            const pulse = 0.10 + Math.abs(Math.sin(frameCount * 0.03)) * 0.10;
+            const hotGlow = ctx.createLinearGradient(0, GROUND_Y - 240, 0, GROUND_Y);
+            hotGlow.addColorStop(0, 'rgba(255,60,0,0)');
+            hotGlow.addColorStop(1, `rgba(255,70,0,${pulse})`);
+            ctx.fillStyle = hotGlow;
+            ctx.fillRect(0, GROUND_Y - 240, CANVAS_W, 240);
+        }
+        if (th.deco === 'jar') {
+            // you're flying INSIDE a giant jar of acid
+            const surfY = 84 + Math.sin(frameCount * 0.02) * 4;
+            // air gap above the liquid
+            ctx.fillStyle = '#18251C';
+            ctx.fillRect(0, 0, CANVAS_W, surfY);
+            // the acid itself
+            const acidGrad = ctx.createLinearGradient(0, surfY, 0, CANVAS_H);
+            acidGrad.addColorStop(0, '#1A5A2A');
+            acidGrad.addColorStop(0.5, '#0E3A1A');
+            acidGrad.addColorStop(1, '#06200E');
+            ctx.fillStyle = acidGrad;
+            ctx.fillRect(0, surfY, CANVAS_W, CANVAS_H - surfY);
+            // sloshing surface
+            ctx.strokeStyle = 'rgba(120,255,140,0.7)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            for (let x = 0; x <= CANVAS_W; x += 10) {
+                const y = surfY + Math.sin(x * 0.025 + frameCount * 0.06) * 5;
+                if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            // big lazy bubbles rising toward the surface
+            for (let i = 0; i < 8; i++) {
+                const h1 = Math.sin(i * 77.7) * 43758.5453;
+                const r1 = h1 - Math.floor(h1);
+                const rise = (frameCount * (0.6 + r1) + r1 * 500) % (GROUND_Y - surfY - 20);
+                ctx.strokeStyle = 'rgba(140,255,160,0.4)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(r1 * CANVAS_W, GROUND_Y - rise, 5 + r1 * 9, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            // glass wall shine (the jar around you — fixed, it doesn't scroll)
+            ctx.fillStyle = 'rgba(255,255,255,0.06)';
+            ctx.fillRect(40, 0, 34, CANVAS_H);
+            ctx.fillRect(CANVAS_W - 90, 0, 22, CANVAS_H);
+            ctx.fillStyle = 'rgba(255,255,255,0.14)';
+            ctx.fillRect(0, 0, 8, CANVAS_H);
+            ctx.fillRect(CANVAS_W - 8, 0, 8, CANVAS_H);
+            // metal lid overhead
+            ctx.fillStyle = '#6A7076';
+            ctx.fillRect(0, 0, CANVAS_W, 22);
+            ctx.fillStyle = '#51565C';
+            for (let x = 0; x < CANVAS_W; x += 40) ctx.fillRect(x + 6, 4, 20, 14);
+        }
+
         // Outdoor scenery silhouettes (slow parallax, variation via world tile index)
         const off = scrollOffset * 0.25;
         const tileW = 170;
@@ -1234,10 +1430,42 @@ function drawBackground() {
                 ctx.ellipse(bx + 85, GROUND_Y + 45, 150, 90 + h1 * 14, 0, Math.PI, 0);
                 ctx.fill();
             } else if (th.deco === 'dunes') {
+                // distant pyramid on alternating tiles
+                if (h1 % 2 === 0) {
+                    ctx.fillStyle = 'rgba(120,70,30,0.6)';
+                    ctx.beginPath();
+                    ctx.moveTo(bx + 20, GROUND_Y);
+                    ctx.lineTo(bx + 85, GROUND_Y - 120 - h1 * 9);
+                    ctx.lineTo(bx + 150, GROUND_Y);
+                    ctx.closePath();
+                    ctx.fill();
+                    // sunlit face
+                    ctx.fillStyle = 'rgba(220,160,80,0.45)';
+                    ctx.beginPath();
+                    ctx.moveTo(bx + 85, GROUND_Y - 120 - h1 * 9);
+                    ctx.lineTo(bx + 150, GROUND_Y);
+                    ctx.lineTo(bx + 114, GROUND_Y);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+                // dune
                 ctx.fillStyle = 'rgba(160,100,40,0.45)';
                 ctx.beginPath();
                 ctx.ellipse(bx + 85, GROUND_Y + 55, 160, 80 + h1 * 12, 0, Math.PI, 0);
                 ctx.fill();
+                // saguaro cactus on the other tiles
+                if (h1 % 2 === 1) {
+                    const cxp = bx + 45 + h1 * 18;
+                    ctx.fillStyle = '#2E6B33';
+                    roundRect(ctx, cxp - 6, GROUND_Y - 64, 12, 64, 6);
+                    ctx.fill();
+                    roundRect(ctx, cxp - 24, GROUND_Y - 52, 9, 24, 4);
+                    ctx.fill();
+                    ctx.fillRect(cxp - 22, GROUND_Y - 34, 18, 8);
+                    roundRect(ctx, cxp + 15, GROUND_Y - 58, 9, 28, 4);
+                    ctx.fill();
+                    ctx.fillRect(cxp + 4, GROUND_Y - 38, 18, 8);
+                }
             } else if (th.deco === 'volcano') {
                 const vh = 150 + h1 * 30;
                 ctx.fillStyle = '#2A0A06';
@@ -1247,14 +1475,38 @@ function drawBackground() {
                 ctx.lineTo(bx + 200, GROUND_Y);
                 ctx.closePath();
                 ctx.fill();
-                // glowing crater
-                ctx.fillStyle = 'rgba(255,80,0,0.8)';
+                // lava stream flowing down the flank
+                ctx.strokeStyle = 'rgba(255,90,0,0.75)';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(bx + 78, GROUND_Y - vh + 4);
+                ctx.quadraticCurveTo(bx + 58, GROUND_Y - vh * 0.5,
+                    bx + 48 + Math.sin(frameCount * 0.05 + i) * 3, GROUND_Y);
+                ctx.stroke();
+                // glowing crater, pulsing with the eruption
+                const glowA = 0.5 + Math.abs(Math.sin(frameCount * 0.06 + i)) * 0.4;
+                ctx.fillStyle = `rgba(255,80,0,${glowA})`;
                 ctx.fillRect(bx + 70, GROUND_Y - vh, 30, 6);
                 const vg = ctx.createRadialGradient(bx + 85, GROUND_Y - vh, 0, bx + 85, GROUND_Y - vh, 60);
-                vg.addColorStop(0, 'rgba(255,100,0,0.35)');
+                vg.addColorStop(0, `rgba(255,100,0,${0.25 + glowA * 0.25})`);
                 vg.addColorStop(1, 'rgba(255,100,0,0)');
                 ctx.fillStyle = vg;
                 ctx.fillRect(bx + 25, GROUND_Y - vh - 60, 120, 120);
+                // eruption — lava blobs arcing out of the crater
+                const vt = frameCount * 0.02 + h1 * 0.7;
+                for (let b = 0; b < 6; b++) {
+                    const ph = (vt + b * 0.23) % 1.35;
+                    if (ph > 1) continue;
+                    const dir = (b % 2 === 0 ? 1 : -1) * (0.4 + (b % 3) * 0.3);
+                    const ex = bx + 85 + dir * ph * 46;
+                    const ey = (GROUND_Y - vh) - (90 * ph - 110 * ph * ph);
+                    ctx.fillStyle = ['#FF4400', '#FF7700', '#FFAA00'][b % 3];
+                    ctx.globalAlpha = 1 - ph * 0.55;
+                    ctx.beginPath();
+                    ctx.arc(ex, ey, 4.5 - ph * 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1;
             } else if (th.deco === 'waves') {
                 ctx.strokeStyle = 'rgba(80,180,255,0.25)';
                 ctx.lineWidth = 3;
@@ -1294,31 +1546,11 @@ function drawBackground() {
         }
     }
 
-    // Conveyor belt
-    ctx.fillStyle = th.belt2;
-    ctx.fillRect(0, GROUND_Y, CANVAS_W, 20);
-    const beltOff = scrollOffset % 28;
-    for (let i = -1; i < CANVAS_W / 28 + 2; i++) {
-        ctx.fillStyle = i % 2 === 0 ? th.belt1 : th.belt2;
-        ctx.fillRect(i * 28 - beltOff, GROUND_Y, 14, 20);
-    }
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    const arrowOff = scrollOffset % 56;
-    for (let i = -1; i < CANVAS_W / 56 + 2; i++) {
-        const ax = i * 56 - arrowOff + 8;
-        ctx.beginPath();
-        ctx.moveTo(ax, GROUND_Y + 5);
-        ctx.lineTo(ax + 10, GROUND_Y + 10);
-        ctx.lineTo(ax, GROUND_Y + 15);
-        ctx.closePath();
-        ctx.fill();
-    }
-
-    // Hazard stripes
+    // Hazard stripes trim the ground edge
     const hazOff = scrollOffset % 36;
     for (let i = -1; i < CANVAS_W / 36 + 2; i++) {
         ctx.fillStyle = i % 2 === 0 ? th.haz1 : th.haz2;
-        ctx.fillRect(i * 36 - hazOff, GROUND_Y + 20, 18, 8);
+        ctx.fillRect(i * 36 - hazOff, GROUND_Y + 4, 18, 8);
     }
 
     // Floor tile grid
@@ -1326,7 +1558,7 @@ function drawBackground() {
     ctx.lineWidth = 1;
     const ftOff = scrollOffset % 80;
     for (let i = -1; i < CANVAS_W / 80 + 2; i++) {
-        ctx.strokeRect(i * 80 - ftOff, GROUND_Y + 28, 80, 28);
+        ctx.strokeRect(i * 80 - ftOff, GROUND_Y + 16, 80, 34);
     }
 
     // Ground edge glow
@@ -2083,6 +2315,7 @@ function _fireFlameShape(cx, baseY, h, w, wobbleIdx) {
 
 function drawPepperFlamesBehind(pl) {
     if (pl.pepperTimer <= 0) return;
+    if (!pl.noGear && envGear() === 'diving') return; // bubble shield instead of flames
     const t = frameCount * 0.07;
     ctx.save();
     // Large red flames rising from below, behind the character
@@ -2106,6 +2339,47 @@ function drawPepperAura(pl) {
     if (pl.pepperTimer <= 0) return;
     const cx = pl.x + pl.width / 2;
     const t = frameCount * 0.07;
+
+    if (!pl.noGear && envGear() === 'diving') {
+        // underwater: shimmering bubble shield instead of fire
+        const cy = pl.y + pl.height / 2;
+        const r = Math.max(pl.width, pl.height) * 0.75 + 8 + Math.sin(t * 2) * 3;
+        ctx.save();
+        const g = ctx.createRadialGradient(cx, cy, r * 0.5, cx, cy, r);
+        g.addColorStop(0, 'rgba(120,220,255,0)');
+        g.addColorStop(0.8, 'rgba(120,220,255,0.20)');
+        g.addColorStop(1, 'rgba(190,240,255,0.55)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(220,245,255,0.8)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // glass shine
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+        ctx.beginPath();
+        ctx.arc(cx - r * 0.3, cy - r * 0.35, r * 0.45, Math.PI * 1.1, Math.PI * 1.5);
+        ctx.stroke();
+        // sparkles orbiting the shield
+        ctx.fillStyle = 'rgba(230,250,255,0.9)';
+        for (let i = 0; i < 5; i++) {
+            const a = t * 1.5 + i * (Math.PI * 2 / 5);
+            ctx.beginPath();
+            ctx.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.9, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        // timer bar (cyan)
+        ctx.globalAlpha = 0.92;
+        const frac = pl.pepperTimer / 300;
+        ctx.fillStyle = '#111';
+        ctx.fillRect(pl.x - 2, pl.y - 18, pl.width + 4, 7);
+        ctx.fillStyle = '#44CCFF';
+        ctx.fillRect(pl.x - 2, pl.y - 18, (pl.width + 4) * frac, 7);
+        ctx.restore();
+        return;
+    }
+
     ctx.save();
 
     // Left side flames
@@ -3075,6 +3349,7 @@ function drawOutro() {
         const stillBurning = f < 395;
         const mc = storyCharObj(380, player.shirtColor, 0, GROUND_Y - 54);
         mc.armor = player.armor;
+        mc.noGear = true; // back on Earth — helmet off for the lick
         mc.pepperTimer = stillBurning ? 80 : 0;
         mc.headRed = stillBurning ? 0 : Math.max(0, 1 - (f - 395) / 45);
         if (stillBurning) drawPepperFlamesBehind(mc);
@@ -3681,32 +3956,11 @@ function drawMenuBackground() {
     ctx.fillStyle = floorGrad;
     ctx.fillRect(0, GROUND_Y, CANVAS_W, CANVAS_H - GROUND_Y);
 
-    // Conveyor belt
-    ctx.fillStyle = '#18182E';
-    ctx.fillRect(0, GROUND_Y, CANVAS_W, 20);
-    const beltOff = menuScrollOffset % 28;
-    for (let i = -1; i < CANVAS_W / 28 + 2; i++) {
-        ctx.fillStyle = i % 2 === 0 ? '#202038' : '#18182E';
-        ctx.fillRect(i * 28 - beltOff, GROUND_Y, 14, 20);
-    }
-    // belt arrows
-    ctx.fillStyle = '#2A2A48';
-    const arrowOff = menuScrollOffset % 56;
-    for (let i = -1; i < CANVAS_W / 56 + 2; i++) {
-        const ax = i * 56 - arrowOff + 8;
-        ctx.beginPath();
-        ctx.moveTo(ax, GROUND_Y + 5);
-        ctx.lineTo(ax + 10, GROUND_Y + 10);
-        ctx.lineTo(ax, GROUND_Y + 15);
-        ctx.closePath();
-        ctx.fill();
-    }
-
-    // Hazard stripes
+    // Hazard stripes trim the ground edge
     const hazOff = menuScrollOffset % 36;
     for (let i = -1; i < CANVAS_W / 36 + 2; i++) {
         ctx.fillStyle = i % 2 === 0 ? '#281600' : '#141000';
-        ctx.fillRect(i * 36 - hazOff, GROUND_Y + 20, 18, 8);
+        ctx.fillRect(i * 36 - hazOff, GROUND_Y + 4, 18, 8);
     }
 
     // Floor tile grid
@@ -3714,7 +3968,7 @@ function drawMenuBackground() {
     ctx.lineWidth = 1;
     const ftOff = menuScrollOffset % 80;
     for (let i = -1; i < CANVAS_W / 80 + 2; i++) {
-        ctx.strokeRect(i * 80 - ftOff, GROUND_Y + 28, 80, 28);
+        ctx.strokeRect(i * 80 - ftOff, GROUND_Y + 16, 80, 34);
     }
 }
 
