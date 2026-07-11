@@ -182,6 +182,9 @@ let storyFrame = 0;
 let outroFrame = 0;
 let victoryWaitFrame = 0;
 let victoryFadeStart = -1; // frame the player pressed a button; -1 = waiting
+let paused = false;        // ESC pause menu (PLAYING only)
+let pauseSel = 0;
+let pauseConfirm = false;  // "are you sure?" step before exiting to menu
 let gameState = STATE.MENU;
 let playerCount = 1;
 let menuScreen = 'main'; // main | levels | maps | difficulty | players | shop
@@ -242,6 +245,33 @@ window.addEventListener('keydown', e => {
         if (e.code === 'Period') timeScale = Math.min(4, timeScale * 2);
         if (e.code === 'Quote') timeScale = 1;
     }
+    if (gameState === STATE.PLAYING && paused) {
+        e.preventDefault();
+        if (e.repeat) return;
+        const nav = e.code === 'ArrowLeft' || e.code === 'ArrowRight' ||
+                    e.code === 'ArrowUp' || e.code === 'ArrowDown';
+        const confirm = e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyW';
+        if (nav) pauseSel = pauseSel === 0 ? 1 : 0;
+        if (pauseConfirm) {
+            if (confirm) {
+                if (pauseSel === 0) exitToMenu();
+                else { pauseConfirm = false; pauseSel = 0; }
+            }
+            if (e.code === 'Escape') { pauseConfirm = false; pauseSel = 0; }
+        } else {
+            if (confirm) {
+                if (pauseSel === 0) resumeGame();
+                else { pauseConfirm = true; pauseSel = 1; } // default to "NO"
+            }
+            if (e.code === 'Escape') resumeGame();
+        }
+        return;
+    }
+    if (gameState === STATE.PLAYING && e.code === 'Escape' && !e.repeat) {
+        e.preventDefault();
+        pauseGame();
+        return;
+    }
     if (gameState === STATE.MENU) {
         if (e.code === 'ArrowLeft' || e.code === 'ArrowUp') {
             e.preventDefault();
@@ -287,7 +317,7 @@ window.addEventListener('keydown', e => {
         }
         return;
     }
-    if (gameState === STATE.PLAYING && isP1ThrustKey(e.code)) {
+    if (gameState === STATE.PLAYING && !paused && isP1ThrustKey(e.code)) {
         e.preventDefault();
         p1Keys.add(e.code);
         p1Thrusting = true;
@@ -354,10 +384,24 @@ function handleMenuPointer(mx, my) {
     else { menuIndex = b.idx; menuConfirm(b.idx); }
 }
 
+function pausePointerSelect(idx) {
+    pauseSel = idx;
+    if (pauseConfirm) {
+        if (idx === 0) exitToMenu();
+        else { pauseConfirm = false; pauseSel = 0; }
+    } else {
+        if (idx === 0) resumeGame();
+        else { pauseConfirm = true; pauseSel = 1; }
+    }
+}
+
 canvas.addEventListener('click', e => {
     const { mx, my } = canvasCoords(e.clientX, e.clientY);
     if (gameState === STATE.MENU) {
         handleMenuPointer(mx, my);
+    } else if (gameState === STATE.PLAYING && paused) {
+        const b = menuBoxAt(mx, my);
+        if (b) pausePointerSelect(b.idx);
     } else if (gameState === STATE.DEAD && deadTimer > 90) {
         resetGame();
     } else if (gameState === STATE.COMPLETE && completeTimer > 60) {
@@ -367,7 +411,7 @@ canvas.addEventListener('click', e => {
     }
 });
 canvas.addEventListener('mousedown', e => {
-    if (gameState === STATE.PLAYING) { p1Thrusting = true; updateFireSound(); }
+    if (gameState === STATE.PLAYING && !paused) { p1Thrusting = true; updateFireSound(); }
 });
 canvas.addEventListener('mouseup', () => { p1Thrusting = false; updateFireSound(); });
 canvas.addEventListener('touchstart', e => {
@@ -382,6 +426,13 @@ canvas.addEventListener('touchstart', e => {
     if (gameState === STATE.INTRO) { startGame(); return; }
     if (gameState === STATE.OUTRO) { finishOutro(); return; }
     if (gameState === STATE.VICTORY_WAIT) { victoryWaitPressed(); return; }
+    if (gameState === STATE.PLAYING && paused) {
+        const t = e.touches[0];
+        const { mx, my } = canvasCoords(t.clientX, t.clientY);
+        const b = menuBoxAt(mx, my);
+        if (b) pausePointerSelect(b.idx);
+        return;
+    }
     if (gameState === STATE.PLAYING) { p1Thrusting = true; updateFireSound(); }
     if (gameState === STATE.DEAD && deadTimer > 90) resetGame();
     if (gameState === STATE.COMPLETE && completeTimer > 60) resetGame();
@@ -3557,6 +3608,7 @@ function startGame() {
     }
     levelTimeLeft = levelDuration;
     victory = false;
+    paused = false;
     boss = null;
     rainbows.length = 0;
     weather.length = 0;
@@ -3726,9 +3778,62 @@ function finishOutro() {
 function resetGame() {
     gameState = STATE.MENU;
     adminMode = false;
+    paused = false;
     menuGoto(chosenMode === 'campaign' ? 'levels' : 'main');
     bgMusic.pause();
     bgMusic.currentTime = 0;
+}
+
+// ─── Pause Menu (ESC during a level) ──────────────────────────────────────────
+function pauseGame() {
+    paused = true;
+    pauseSel = 0;
+    pauseConfirm = false;
+    stopFireSound();
+}
+
+function resumeGame() {
+    paused = false;
+    updateFireSound();
+}
+
+function exitToMenu() {
+    bankCoins(); // collected coins are kept even when quitting a run
+    resetGame();
+}
+
+function drawPauseMenu() {
+    menuBoxes = [];
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#FFAA00';
+    ctx.font = 'bold 44px Arial';
+    ctx.shadowBlur = 16;
+    ctx.shadowColor = '#FF6600';
+    ctx.fillText(pauseConfirm ? 'EXIT TO MAIN MENU?' : 'PAUSED', CANVAS_W / 2, 200);
+    ctx.shadowBlur = 0;
+    if (pauseConfirm) {
+        ctx.fillStyle = '#CCCCDD';
+        ctx.font = '16px Arial';
+        ctx.fillText('Are you sure? Your collected coins will be banked.', CANVAS_W / 2, 240);
+    }
+    const opts = pauseConfirm
+        ? [{ label: 'YES, EXIT', sub: 'back to the main menu', color: '#FF4444', selColor: 'rgba(200,50,50,0.45)' },
+           { label: 'NO',        sub: 'keep playing',          color: '#44CC44', selColor: 'rgba(40,160,60,0.45)' }]
+        : [{ label: 'RESUME',       sub: 'back to the ride',   color: '#44CC44', selColor: 'rgba(40,160,60,0.45)' },
+           { label: 'EXIT TO MENU', sub: 'asks to make sure',  color: '#FF4444', selColor: 'rgba(200,50,50,0.45)' }];
+    opts.forEach((o, i) => {
+        const w = 200, h = 76;
+        const x = CANVAS_W / 2 - (w + 15) + i * (w + 30), y = 275;
+        drawMenuBox(x, y, w, h, pauseSel === i, o.label, o.sub, o);
+        pushBox(x, y, w, h, i);
+    });
+    ctx.fillStyle = 'rgba(200,200,220,0.55)';
+    ctx.font = '13px Arial';
+    ctx.fillText('arrows: select   ·   ENTER: confirm   ·   ESC: ' + (pauseConfirm ? 'back' : 'resume'), CANVAS_W / 2, 396);
+    ctx.restore();
 }
 
 // ─── Dead State Update ────────────────────────────────────────────────────────
@@ -4174,7 +4279,7 @@ function update() {
         updateOutro();
     } else if (gameState === STATE.INTRO) {
         updateIntro();
-    } else if (gameState === STATE.PLAYING) {
+    } else if (gameState === STATE.PLAYING && !paused) {
         // scroll (speed ramps up but caps, so long campaign levels stay fair)
         scrollOffset += scrollSpeed;
         scrollSpeed = Math.min(scrollSpeed + 0.0015, SCROLL_SPEED_BASE + 5);
@@ -4265,6 +4370,7 @@ function render() {
         renderFullScreen();
         drawAdminOverlay();
         drawMusicPrompt();
+        if (paused) drawPauseMenu();
     } else if (gameState === STATE.DEAD) {
         renderFullScreenDead();
         drawGameOver();
@@ -4287,6 +4393,24 @@ function loop(now) {
     render();
     requestAnimationFrame(loop);
 }
+
+// ─── Game Icon (favicon drawn at runtime — no image files needed) ─────────────
+(function setFavicon() {
+    try {
+        const ic = document.createElement('canvas');
+        ic.width = ic.height = 64;
+        const g = ic.getContext('2d');
+        g.font = '52px serif';
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillText('🌶', 32, 36);
+        const link = document.createElement('link');
+        link.rel = 'icon';
+        link.type = 'image/png';
+        link.href = ic.toDataURL('image/png');
+        document.head.appendChild(link);
+    } catch (e) { /* icon is cosmetic — never block the game on it */ }
+})();
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 loadSave();
