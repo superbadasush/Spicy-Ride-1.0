@@ -12,14 +12,14 @@ minutes as its number:
 
 | Level | Duration | Environment |
 |-------|----------|-------------|
-| 1     | 1 min    | Lab (current look) |
+| 1     | 30 sec   | Ramen shop (matches the intro story) |
 | 2     | 2 min    | City |
 | 3     | 3 min    | Snow |
 | 4     | 4 min    | Desert |
 | 5     | 5 min    | Ocean |
 | 6     | 6 min    | Lava |
 | 7     | 7 min    | Acid |
-| 8     | 8 min    | Factory |
+| 8     | 4 min    | Space station |
 | 9     | 9 min    | Space |
 | 10    | 10 min   | Moon (+ boss fight) |
 
@@ -50,6 +50,10 @@ Chosen before starting a level:
   rainbows** at the player.
 - The rainbow vomit is an attack to dodge (like a moving beam/arc).
 - The boss is defeated by surviving the rest of the level (beating the level = win).
+- Beating the campaign awards a **1,000-coin bonus** on top of the coins collected.
+- Beating the boss plays an **ending cutscene**: the hero takes a piece of the
+  fish's rainbow, pockets it, flies back to Earth and licks it off his arm —
+  curing the fire at last.
 - *Suggestion:* the boss slowly chases the player's height, telegraphs each rainbow
   attack with a warning sound + flash, and does a big explosion + victory screen
   when the timer ends. Beating it rolls the credits / unlocks something special
@@ -84,6 +88,8 @@ pads on the character in the set's colour:
 - The game already has an admin mode on **F** (spawns ramen / sauce / pepper).
 - Add: pressing **G** gives **infinite coins**, **infinite hearts** and **unlocks
   all campaign levels** — for testing the shop and levels.
+- With testing mode on, **`,`** makes time 2× slower, **`.`** 2× faster and
+  **`'`** back to normal.
 - *Suggestion:* show a "TESTING MODE" badge on screen while it's active, and don't
   save admin-earned coins/unlocks to the real save file, so testing can't spoil a
   normal playthrough.

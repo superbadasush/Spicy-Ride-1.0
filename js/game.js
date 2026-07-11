@@ -144,8 +144,8 @@ function equippedShirt() {
 // ─── Level Themes ─────────────────────────────────────────────────────────────
 // Campaign level N uses THEMES[N-1]; endless mode picks any unlocked theme.
 const THEMES = [
-    { name: 'LAB',     sky: '#07071A', indoor: true,  wall: '#0C0C22', wallLine: '#181830', deco: 'lab',
-      floor1: '#10101E', floor2: '#080812', belt1: '#202038', belt2: '#18182E', haz1: '#281600', haz2: '#141000', glow: '#FF6600', effect: null,      stars: false },
+    { name: 'SHOP',    sky: '#241634', indoor: true,  wall: '#2A1A3C', wallLine: '#3A2650', deco: 'shop',
+      floor1: '#1A1024', floor2: '#0C0814', belt1: '#3A2618', belt2: '#2A1A10', haz1: '#3E1A00', haz2: '#200E00', glow: '#FF6600', effect: null,      stars: false },
     { name: 'CITY',    sky: '#0A0A2E', indoor: false, wall: '#101038', wallLine: '#1A1A4A', deco: 'city',
       floor1: '#14141E', floor2: '#0A0A12', belt1: '#26263A', belt2: '#1C1C2E', haz1: '#282800', haz2: '#141400', glow: '#FFCC00', effect: null,      stars: true  },
     { name: 'SNOW',    sky: '#1A2A4A', indoor: false, wall: '#223A5E', wallLine: '#2E4A72', deco: 'hills',
@@ -158,8 +158,8 @@ const THEMES = [
       floor1: '#2A0E08', floor2: '#180604', belt1: '#3E1810', belt2: '#2A0E08', haz1: '#FF3300', haz2: '#661100', glow: '#FF3300', effect: 'embers',  stars: false },
     { name: 'ACID',    sky: '#04140A', indoor: true,  wall: '#082212', wallLine: '#0E3A1E', deco: 'lab',
       floor1: '#0A1E12', floor2: '#04100A', belt1: '#143822', belt2: '#0C2416', haz1: '#1E4A00', haz2: '#0E2400', glow: '#44FF44', effect: 'bubbles', stars: false },
-    { name: 'FACTORY', sky: '#14141A', indoor: true,  wall: '#1E1E26', wallLine: '#2C2C36', deco: 'lab',
-      floor1: '#1A1A22', floor2: '#0E0E14', belt1: '#30303C', belt2: '#24242E', haz1: '#3A2A00', haz2: '#1E1600', glow: '#FF8800', effect: 'embers',  stars: false },
+    { name: 'SPACE STATION', sky: '#0A0A16', indoor: true, wall: '#14141F', wallLine: '#26263A', deco: 'station',
+      floor1: '#16161E', floor2: '#0A0A10', belt1: '#2A2A3A', belt2: '#1E1E2A', haz1: '#2A1A50', haz2: '#160C2C', glow: '#8877FF', effect: null,      stars: false },
     { name: 'SPACE',   sky: '#020210', indoor: false, wall: '#060620', wallLine: '#0E0E30', deco: null,
       floor1: '#101018', floor2: '#08080E', belt1: '#22222E', belt2: '#181822', haz1: '#101040', haz2: '#080820', glow: '#8844FF', effect: null,      stars: true  },
     { name: 'MOON',    sky: '#04040E', indoor: false, wall: '#0A0A18', wallLine: '#14142A', deco: 'craters',
@@ -169,8 +169,11 @@ let currentThemeIdx = 0;
 function theme() { return THEMES[currentThemeIdx]; }
 
 // ─── Game State ───────────────────────────────────────────────────────────────
-const STATE = { MENU: 0, INTRO: 1, PLAYING: 2, DEAD: 3, COMPLETE: 4, STORY: 5 };
+const STATE = { MENU: 0, INTRO: 1, PLAYING: 2, DEAD: 3, COMPLETE: 4, STORY: 5, OUTRO: 6, VICTORY_WAIT: 7 };
 let storyFrame = 0;
+let outroFrame = 0;
+let victoryWaitFrame = 0;
+let victoryFadeStart = -1; // frame the player pressed a button; -1 = waiting
 let gameState = STATE.MENU;
 let playerCount = 1;
 let menuScreen = 'main'; // main | levels | maps | difficulty | players | shop
@@ -225,6 +228,12 @@ window.addEventListener('keydown', e => {
         saveData.bank = 999999;
         saveData.unlockedLevel = 10;
     }
+    if (testingMode) {
+        // time controls: , = 2x slower   . = 2x faster   ' = normal
+        if (e.code === 'Comma') timeScale = Math.max(0.25, timeScale / 2);
+        if (e.code === 'Period') timeScale = Math.min(4, timeScale * 2);
+        if (e.code === 'Quote') timeScale = 1;
+    }
     if (gameState === STATE.MENU) {
         if (e.code === 'ArrowLeft' || e.code === 'ArrowUp') {
             e.preventDefault();
@@ -247,9 +256,26 @@ window.addEventListener('keydown', e => {
         return;
     }
     if (gameState === STATE.COMPLETE) {
-        if ((e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyW') && completeTimer > 60) {
+        if ((e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyW') && !e.repeat && completeTimer > 60) {
             e.preventDefault();
             resetGame();
+        }
+        return;
+    }
+    if (gameState === STATE.OUTRO) {
+        // !e.repeat: a thrust key still held from gameplay must not auto-skip
+        // the ending cutscene via key auto-repeat
+        if ((e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyW') && !e.repeat && outroFrame > 30) {
+            e.preventDefault();
+            finishOutro();
+        }
+        return;
+    }
+    if (gameState === STATE.VICTORY_WAIT) {
+        // any (fresh) button fades to black and rolls the final cutscene
+        if (!e.repeat) {
+            e.preventDefault();
+            victoryWaitPressed();
         }
         return;
     }
@@ -259,20 +285,21 @@ window.addEventListener('keydown', e => {
         p1Thrusting = true;
         updateFireSound();
     }
-    if (e.code === 'KeyW') {
+    if (e.code === 'KeyW' && !e.repeat) {
         e.preventDefault();
-        if (gameState === STATE.STORY) startIntro();
+        if (gameState === STATE.STORY && storyFrame > 15) startIntro();
         else if (gameState === STATE.INTRO) startGame();
         if (gameState === STATE.DEAD && deadTimer > 90) resetGame();
     }
     if (e.code === 'ArrowUp') {
         e.preventDefault();
         if (gameState === STATE.PLAYING && playerCount === 2) { p2Thrusting = true; updateFireSound(); }
-        if (gameState === STATE.DEAD && deadTimer > 90) resetGame();
+        if (gameState === STATE.DEAD && deadTimer > 90 && !e.repeat) resetGame();
     }
     if (e.code === 'Space' || e.code === 'Enter') {
         e.preventDefault();
-        if (gameState === STATE.STORY) startIntro();
+        if (e.repeat) return;
+        if (gameState === STATE.STORY && storyFrame > 15) startIntro();
         else if (gameState === STATE.INTRO) startGame();
         if (gameState === STATE.DEAD && deadTimer > 90) resetGame();
     }
@@ -327,6 +354,8 @@ canvas.addEventListener('click', e => {
         resetGame();
     } else if (gameState === STATE.COMPLETE && completeTimer > 60) {
         resetGame();
+    } else if (gameState === STATE.VICTORY_WAIT) {
+        victoryWaitPressed();
     }
 });
 canvas.addEventListener('mousedown', e => {
@@ -343,6 +372,8 @@ canvas.addEventListener('touchstart', e => {
     }
     if (gameState === STATE.STORY) { startIntro(); return; }
     if (gameState === STATE.INTRO) { startGame(); return; }
+    if (gameState === STATE.OUTRO) { finishOutro(); return; }
+    if (gameState === STATE.VICTORY_WAIT) { victoryWaitPressed(); return; }
     if (gameState === STATE.PLAYING) { p1Thrusting = true; updateFireSound(); }
     if (gameState === STATE.DEAD && deadTimer > 90) resetGame();
     if (gameState === STATE.COMPLETE && completeTimer > 60) resetGame();
@@ -604,28 +635,47 @@ function drawCharacter(pl, isThrust, introState) {
     const headR = 16;
     const onFire = pl.pepperTimer > 0;
 
-    // body
     const skinColor = onFire
         ? `rgb(255,${Math.max(70, 120 + Math.round(Math.sin(frameCount * 0.12) * 25))},40)`
         : pl.headRed > 0
             ? `rgb(${Math.min(255, 220 + pl.headRed * 35)},${Math.max(60, 160 - pl.headRed * 50)},${Math.max(60, 130 - pl.headRed * 40)})`
             : '#F0C080';
-    ctx.fillStyle = skinColor;
-    roundRect(ctx, pl.x, bodyTop + headR, pl.width, bodyH, 8);
-    ctx.fill();
+    const shirtCol = pl.shirtColor || '#3355CC';
 
-    // shirt
+    // shirt — a proper top covering the whole torso
     if (onFire) {
-        const fs = ctx.createLinearGradient(pl.x + 4, bodyTop + headR + bodyH * 0.3, pl.x + 4, bodyTop + headR + bodyH * 0.85);
+        const fs = ctx.createLinearGradient(pl.x, bodyTop + headR, pl.x, bodyTop + headR + bodyH);
         fs.addColorStop(0, '#FF5500');
         fs.addColorStop(0.5, '#CC2200');
         fs.addColorStop(1, '#FF3300');
         ctx.fillStyle = fs;
     } else {
-        ctx.fillStyle = pl.shirtColor || '#3355CC';
+        ctx.fillStyle = shirtCol;
     }
-    roundRect(ctx, pl.x + 4, bodyTop + headR + bodyH * 0.3, pl.width - 8, bodyH * 0.55, 5);
+    roundRect(ctx, pl.x, bodyTop + headR, pl.width, bodyH, 8);
     ctx.fill();
+    if (!onFire) {
+        // fabric shading on the lower half
+        ctx.fillStyle = 'rgba(0,0,0,0.16)';
+        roundRect(ctx, pl.x, bodyTop + headR + bodyH * 0.55, pl.width, bodyH * 0.45, 6);
+        ctx.fill();
+        // collar
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.beginPath();
+        ctx.moveTo(cx - 7, bodyTop + headR + 1);
+        ctx.lineTo(cx, bodyTop + headR + 8);
+        ctx.lineTo(cx + 7, bodyTop + headR + 1);
+        ctx.closePath();
+        ctx.fill();
+        // buttons
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath();
+        ctx.arc(cx, bodyTop + headR + 14, 1.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx, bodyTop + headR + 21, 1.4, 0, Math.PI * 2);
+        ctx.fill();
+    }
 
     // armour chestplate over the suit
     if (pl.armor) {
@@ -658,12 +708,14 @@ function drawCharacter(pl, isThrust, introState) {
         }
     }
 
-    // legs
+    // legs — jeans with shoes
+    const pantsCol = onFire ? '#661100' : '#2B3F66';
+    const shoeCol = '#221408';
     if (!pl.crumpled) {
         const legTop = bodyTop + headR + bodyH - 4;
         const legLen = pl.height * 0.35;
-        ctx.strokeStyle = '#222';
-        ctx.lineWidth = 7;
+        ctx.strokeStyle = pantsCol;
+        ctx.lineWidth = 8;
         ctx.lineCap = 'round';
         // left leg
         ctx.save();
@@ -673,6 +725,10 @@ function drawCharacter(pl, isThrust, introState) {
         ctx.moveTo(0, 0);
         ctx.lineTo(0, legLen);
         ctx.stroke();
+        ctx.fillStyle = shoeCol;
+        ctx.beginPath();
+        ctx.ellipse(2, legLen + 3, 7, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
         // right leg
         ctx.save();
@@ -682,11 +738,15 @@ function drawCharacter(pl, isThrust, introState) {
         ctx.moveTo(0, 0);
         ctx.lineTo(0, legLen);
         ctx.stroke();
+        ctx.fillStyle = shoeCol;
+        ctx.beginPath();
+        ctx.ellipse(2, legLen + 3, 7, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
     } else {
         // crumpled legs
-        ctx.strokeStyle = '#222';
-        ctx.lineWidth = 7;
+        ctx.strokeStyle = pantsCol;
+        ctx.lineWidth = 8;
         ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.moveTo(cx - 7, bodyTop + headR + bodyH);
@@ -696,33 +756,48 @@ function drawCharacter(pl, isThrust, introState) {
         ctx.moveTo(cx + 7, bodyTop + headR + bodyH);
         ctx.lineTo(cx + 15, bodyTop + headR + bodyH + 20);
         ctx.stroke();
+        ctx.fillStyle = shoeCol;
+        ctx.beginPath();
+        ctx.ellipse(cx - 17, bodyTop + headR + bodyH + 23, 6, 3.5, 0.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(cx + 17, bodyTop + headR + bodyH + 23, 6, 3.5, -0.4, 0, Math.PI * 2);
+        ctx.fill();
     }
 
-    // arm (right arm)
-    ctx.strokeStyle = skinColor;
+    // arms — sleeves in the shirt colour, skin-coloured hands at the ends
+    ctx.strokeStyle = onFire ? '#CC3300' : shirtCol;
     ctx.lineWidth = 6;
     ctx.lineCap = 'round';
+    let handX, handY;
     if (introState === 'reaching') {
-        ctx.beginPath();
-        ctx.moveTo(pl.x + pl.width, bodyTop + headR + 10);
-        ctx.lineTo(pl.x + pl.width + 28, bodyTop + headR + 20);
-        ctx.stroke();
+        handX = pl.x + pl.width + 28;
+        handY = bodyTop + headR + 20;
     } else if (introState === 'eating') {
-        ctx.beginPath();
-        ctx.moveTo(pl.x + pl.width, bodyTop + headR + 10);
-        ctx.lineTo(pl.x + pl.width + 14, bodyTop);
-        ctx.stroke();
+        handX = pl.x + pl.width + 14;
+        handY = bodyTop;
     } else {
-        ctx.beginPath();
-        ctx.moveTo(pl.x + pl.width, bodyTop + headR + 10);
-        ctx.lineTo(pl.x + pl.width + 16, bodyTop + headR + 28);
-        ctx.stroke();
+        handX = pl.x + pl.width + 16;
+        handY = bodyTop + headR + 28;
     }
+    // right arm
+    ctx.beginPath();
+    ctx.moveTo(pl.x + pl.width, bodyTop + headR + 10);
+    ctx.lineTo(handX, handY);
+    ctx.stroke();
     // left arm
     ctx.beginPath();
     ctx.moveTo(pl.x, bodyTop + headR + 10);
     ctx.lineTo(pl.x - 14, bodyTop + headR + 28);
     ctx.stroke();
+    // hands
+    ctx.fillStyle = skinColor;
+    ctx.beginPath();
+    ctx.arc(handX, handY, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(pl.x - 14, bodyTop + headR + 28, 3.5, 0, Math.PI * 2);
+    ctx.fill();
 
     // armour shoulder pads
     if (pl.armor) {
@@ -949,16 +1024,23 @@ function drawBackground() {
     ctx.fillStyle = th.sky;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    // Starfield (city night / space / moon)
+    // Starfield (city night / space / moon) — hash-scattered like a real sky:
+    // random positions (no rows), mixed sizes/colours, per-star parallax depth
     if (th.stars) {
         ctx.save();
-        ctx.fillStyle = '#FFFFFF';
-        for (let i = 0; i < 60; i++) {
-            const span = CANVAS_W + 20;
-            const sx = ((i * 137 + 40 - scrollOffset * 0.06) % span + span) % span - 10;
-            const sy = 15 + ((i * 89) % (GROUND_Y - 140));
-            ctx.globalAlpha = 0.3 + Math.abs(Math.sin(frameCount * 0.03 + i)) * 0.6;
-            ctx.fillRect(sx, sy, 2, 2);
+        const span = CANVAS_W + 20;
+        for (let i = 0; i < 180; i++) {
+            const h1 = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+            const h2 = Math.sin(i * 269.5 + 183.3) * 28001.8384;
+            const rx = h1 - Math.floor(h1); // 0..1, effectively random per star
+            const ry = h2 - Math.floor(h2);
+            const depth = 0.02 + ry * 0.06; // farther stars drift slower
+            const sx = ((rx * span - scrollOffset * depth) % span + span) % span - 10;
+            const sy = 10 + ry * (GROUND_Y - 145);
+            const size = rx < 0.75 ? 1 : rx < 0.94 ? 2 : 3;
+            ctx.fillStyle = i % 11 === 0 ? '#AAD4FF' : i % 13 === 0 ? '#FFE8B8' : '#FFFFFF';
+            ctx.globalAlpha = 0.25 + Math.abs(Math.sin(frameCount * 0.02 + i * 1.7)) * 0.65;
+            ctx.fillRect(sx, sy, size, size);
         }
         ctx.restore();
     }
@@ -995,7 +1077,7 @@ function drawBackground() {
             ctx.fill();
         }
 
-        // Back wall panels with monitors (slow parallax)
+        // Back wall panels (slow parallax) with per-theme decorations
         const wallOff = (scrollOffset * 0.35) % 200;
         for (let i = -1; i < CANVAS_W / 200 + 2; i++) {
             const wx = i * 200 - wallOff;
@@ -1004,41 +1086,128 @@ function drawBackground() {
             ctx.strokeStyle = th.wallLine;
             ctx.lineWidth = 1;
             ctx.strokeRect(wx, 58, 200, GROUND_Y - 58);
-            ctx.fillStyle = '#001833';
-            ctx.fillRect(wx + 48, GROUND_Y - 170, 84, 58);
-            ctx.fillStyle = 'rgba(0,110,240,0.45)';
-            ctx.fillRect(wx + 51, GROUND_Y - 167, 78, 52);
-            ctx.strokeStyle = 'rgba(0,180,255,0.55)';
-            for (let row = 0; row < 4; row++) {
-                const lw = 20 + Math.abs(Math.sin(scrollOffset * 0.018 + i + row * 1.3)) * 40;
+            if (th.deco === 'lab') {
+                // wall monitor with data lines
+                ctx.fillStyle = '#001833';
+                ctx.fillRect(wx + 48, GROUND_Y - 170, 84, 58);
+                ctx.fillStyle = 'rgba(0,110,240,0.45)';
+                ctx.fillRect(wx + 51, GROUND_Y - 167, 78, 52);
+                ctx.strokeStyle = 'rgba(0,180,255,0.55)';
+                for (let row = 0; row < 4; row++) {
+                    const lw = 20 + Math.abs(Math.sin(scrollOffset * 0.018 + i + row * 1.3)) * 40;
+                    ctx.beginPath();
+                    ctx.moveTo(wx + 54, GROUND_Y - 160 + row * 11);
+                    ctx.lineTo(wx + 54 + lw, GROUND_Y - 160 + row * 11);
+                    ctx.stroke();
+                }
+            } else if (th.deco === 'shop') {
+                // wall shelf with ramen bowls and sauce bottles
+                ctx.fillStyle = '#4A2E14';
+                ctx.fillRect(wx + 30, GROUND_Y - 175, 140, 8);
+                for (let b = 0; b < 3; b++) {
+                    const bx2 = wx + 55 + b * 45;
+                    if (b % 2 === 0) {
+                        ctx.fillStyle = '#CC2222';
+                        ctx.beginPath();
+                        ctx.arc(bx2, GROUND_Y - 177, 12, Math.PI, 0);
+                        ctx.fill();
+                    } else {
+                        ctx.fillStyle = '#AA1111';
+                        ctx.fillRect(bx2 - 5, GROUND_Y - 199, 10, 24);
+                        ctx.fillStyle = '#FF6600';
+                        ctx.fillRect(bx2 - 3, GROUND_Y - 205, 6, 6);
+                    }
+                }
+                // hanging paper lantern
+                ctx.strokeStyle = '#443322';
+                ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.moveTo(wx + 54, GROUND_Y - 160 + row * 11);
-                ctx.lineTo(wx + 54 + lw, GROUND_Y - 160 + row * 11);
+                ctx.moveTo(wx + 100, 58);
+                ctx.lineTo(wx + 100, 92);
+                ctx.stroke();
+                ctx.fillStyle = '#DD3322';
+                ctx.beginPath();
+                ctx.ellipse(wx + 100, 108, 14, 17, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'rgba(255,200,80,0.5)';
+                ctx.beginPath();
+                ctx.ellipse(wx + 100, 108, 8, 11, 0, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (th.deco === 'station') {
+                // porthole window with twinkling stars outside
+                ctx.fillStyle = '#02020C';
+                ctx.beginPath();
+                ctx.arc(wx + 100, GROUND_Y - 165, 34, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#3A3A54';
+                ctx.lineWidth = 5;
+                ctx.stroke();
+                ctx.fillStyle = '#FFF';
+                for (let s2 = 0; s2 < 10; s2++) {
+                    // hash-scattered across the porthole disc
+                    const hh1 = Math.sin((s2 + i * 17) * 127.1) * 43758.5453;
+                    const hh2 = Math.sin((s2 + i * 17) * 269.5) * 28001.8384;
+                    const ang = (hh1 - Math.floor(hh1)) * Math.PI * 2;
+                    const rad = Math.sqrt(hh2 - Math.floor(hh2)) * 27;
+                    ctx.globalAlpha = 0.35 + Math.abs(Math.sin(frameCount * 0.03 + s2 * 2 + i)) * 0.55;
+                    ctx.fillRect(wx + 100 + Math.cos(ang) * rad, GROUND_Y - 165 + Math.sin(ang) * rad, 2, 2);
+                }
+                ctx.globalAlpha = 1;
+                // pipe along the wall
+                ctx.strokeStyle = th.wallLine;
+                ctx.lineWidth = 6;
+                ctx.beginPath();
+                ctx.moveTo(wx, 100);
+                ctx.lineTo(wx + 200, 100);
                 ctx.stroke();
             }
         }
 
-        // Lab tables (mid parallax)
+        // Mid-parallax furniture, per theme
         const tableOff = (scrollOffset * 0.65) % 280;
         for (let i = -1; i < CANVAS_W / 280 + 2; i++) {
             const tx = i * 280 - tableOff;
-            ctx.fillStyle = th.wallLine;
-            ctx.fillRect(tx, GROUND_Y - 112, 170, 8);
-            ctx.fillRect(tx + 6, GROUND_Y - 104, 12, 104);
-            ctx.fillRect(tx + 152, GROUND_Y - 104, 12, 104);
-            ctx.fillStyle = '#0A2035';
-            ctx.fillRect(tx + 62, GROUND_Y - 142, 20, 30);
-            ctx.fillStyle = 'rgba(180,40,40,0.45)';
-            ctx.fillRect(tx + 64, GROUND_Y - 125, 16, 13);
-            ctx.fillStyle = '#0A2035';
-            ctx.beginPath();
-            ctx.arc(tx + 28, GROUND_Y - 122, 12, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillRect(tx + 25, GROUND_Y - 139, 6, 17);
-            ctx.fillStyle = 'rgba(0,200,100,0.35)';
-            ctx.beginPath();
-            ctx.arc(tx + 28, GROUND_Y - 122, 9, 0, Math.PI * 2);
-            ctx.fill();
+            if (th.deco === 'shop') {
+                // wooden dining table with a bowl of ramen
+                ctx.fillStyle = '#5A3A1C';
+                ctx.fillRect(tx, GROUND_Y - 104, 150, 10);
+                ctx.fillRect(tx + 8, GROUND_Y - 94, 12, 94);
+                ctx.fillRect(tx + 130, GROUND_Y - 94, 12, 94);
+                ctx.fillStyle = '#CC2222';
+                ctx.beginPath();
+                ctx.arc(tx + 70, GROUND_Y - 106, 12, Math.PI, 0);
+                ctx.fill();
+            } else if (th.deco === 'station') {
+                // control console with blinking status lights
+                ctx.fillStyle = '#1C1C30';
+                ctx.fillRect(tx, GROUND_Y - 110, 130, 110);
+                ctx.fillStyle = 'rgba(80,220,160,0.5)';
+                ctx.fillRect(tx + 12, GROUND_Y - 96, 46, 26);
+                for (let b2 = 0; b2 < 4; b2++) {
+                    const on = Math.sin(frameCount * 0.05 + i * 2 + b2) > 0;
+                    ctx.fillStyle = on ? 'rgba(255,80,80,0.6)' : 'rgba(255,200,60,0.35)';
+                    ctx.fillRect(tx + 72 + b2 * 13, GROUND_Y - 92, 8, 8);
+                }
+            } else {
+                // lab bench with beakers
+                ctx.fillStyle = th.wallLine;
+                ctx.fillRect(tx, GROUND_Y - 112, 170, 8);
+                ctx.fillRect(tx + 6, GROUND_Y - 104, 12, 104);
+                ctx.fillRect(tx + 152, GROUND_Y - 104, 12, 104);
+                ctx.fillStyle = '#0A2035';
+                ctx.fillRect(tx + 62, GROUND_Y - 142, 20, 30);
+                ctx.fillStyle = 'rgba(180,40,40,0.45)';
+                ctx.fillRect(tx + 64, GROUND_Y - 125, 16, 13);
+                ctx.fillStyle = '#0A2035';
+                ctx.beginPath();
+                ctx.arc(tx + 28, GROUND_Y - 122, 12, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillRect(tx + 25, GROUND_Y - 139, 6, 17);
+                ctx.fillStyle = 'rgba(0,200,100,0.35)';
+                ctx.beginPath();
+                ctx.arc(tx + 28, GROUND_Y - 122, 9, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
     } else {
         // Outdoor scenery silhouettes (slow parallax, variation via world tile index)
@@ -2416,7 +2585,8 @@ function drawTestingBadge() {
     ctx.fillStyle = '#FFDD00';
     ctx.font = 'bold 12px Arial';
     ctx.textAlign = 'right';
-    ctx.fillText('⚡ TESTING MODE — progress not saved', CANVAS_W - 16, CANVAS_H - 14);
+    const speed = timeScale !== 1 ? ` — ${timeScale}× speed` : '';
+    ctx.fillText(`⚡ TESTING MODE${speed} — progress not saved`, CANVAS_W - 16, CANVAS_H - 14);
     ctx.restore();
 }
 
@@ -2457,7 +2627,14 @@ function drawLevelComplete() {
     ctx.font = 'bold 20px Arial';
     ctx.fillText(`🪙 Bank: ${saveData.bank}`, CANVAS_W / 2, 264);
 
-    if (!victory && currentLevel + 1 <= THEMES.length) {
+    if (victory) {
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 19px Arial';
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#FFAA00';
+        ctx.fillText('🏆 CAMPAIGN BONUS: +1000 coins!', CANVAS_W / 2, 306);
+        ctx.shadowBlur = 0;
+    } else if (currentLevel + 1 <= THEMES.length) {
         ctx.fillStyle = '#FFAA00';
         ctx.font = 'bold 17px Arial';
         ctx.fillText(`Level ${currentLevel + 1} (${THEMES[currentLevel].name}) unlocked!`, CANVAS_W / 2, 306);
@@ -2719,6 +2896,227 @@ function drawStory() {
     if (f >= 355) {
         ctx.fillStyle = '#000';
         ctx.globalAlpha = Math.min(1, (f - 355) / 30);
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        ctx.globalAlpha = 1;
+    }
+}
+
+// ─── Victory Wait (boss beaten — press any button for the finale) ─────────────
+function drawVictoryWait() {
+    renderFullScreenDead();
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(0, 150, CANVAS_W, 130);
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 38px Arial';
+    ctx.shadowBlur = 18;
+    ctx.shadowColor = '#FFAA00';
+    ctx.fillText('YOU BEAT THE RAINBOW FISH!', CANVAS_W / 2, 205);
+    ctx.shadowBlur = 0;
+    if (victoryFadeStart < 0 && Math.sin(frameCount * 0.12) > -0.3) {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 19px Arial';
+        ctx.fillText('press any button', CANVAS_W / 2, 255);
+    }
+    ctx.restore();
+    // fade to black once a button was pressed
+    if (victoryFadeStart >= 0) {
+        ctx.fillStyle = '#000';
+        ctx.globalAlpha = Math.min(1, (victoryWaitFrame - victoryFadeStart) / 45);
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        ctx.globalAlpha = 1;
+    }
+}
+
+// ─── Ending Cutscene (after beating the boss) ─────────────────────────────────
+function updateOutro() {
+    outroFrame++;
+    if (boss && outroFrame < 210) {
+        boss.wingT += 0.12;
+        if (outroFrame >= 150) {
+            // robbed of its rainbow, the fish flies away
+            boss.x += 3.5;
+            boss.y -= 1.5;
+        }
+    }
+    if (outroFrame > 480) finishOutro();
+}
+
+function outroCaption(text, big) {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = `bold ${big ? 30 : 20}px Arial`;
+    ctx.fillStyle = big ? '#FFD700' : '#FFFFFF';
+    ctx.shadowBlur = big ? 16 : 8;
+    ctx.shadowColor = big ? '#FFAA00' : '#000000';
+    ctx.fillText(text, CANVAS_W / 2, big ? CANVAS_H / 2 - 120 : 70);
+    ctx.restore();
+}
+
+function drawOutro() {
+    const f = outroFrame;
+    const lerp = (a, b, t) => a + (b - a) * Math.max(0, Math.min(1, t));
+
+    if (f < 210) {
+        // ── Scene 1: on the moon, next to the beaten fish ──
+        drawBackground();
+        if (boss) drawBoss();
+
+        // hero hovers by the fish's mouth, still burning with spice
+        const mcX = (boss ? boss.x : 620) - 175;
+        const mcY = (boss ? boss.y : 280) - 20 + Math.sin(f * 0.08) * 6;
+        const mc = storyCharObj(mcX, player.shirtColor, 0, mcY);
+        mc.armor = player.armor;
+        mc.pepperTimer = 100;
+        drawPepperFlamesBehind(mc);
+        drawCharacter(mc, false, f >= 40 && f < 150 ? 'reaching' : 'idle');
+
+        // the rainbow piece: mouth → hand → pocket
+        let bxr, byr, r = 10;
+        if (f < 90) {
+            bxr = lerp((boss ? boss.x : 620) - 96, mcX + 44, (f - 60) / 30);
+            byr = lerp((boss ? boss.y : 280) + 13, mcY + 28, (f - 60) / 30);
+        } else if (f < 150) {
+            bxr = mcX + 44;
+            byr = mcY + 28;
+        } else {
+            bxr = lerp(mcX + 44, mcX + 12, (f - 150) / 40);
+            byr = lerp(mcY + 28, mcY + 42, (f - 150) / 40);
+            r = lerp(10, 0, (f - 160) / 30);
+        }
+        if (r > 0.5) {
+            ctx.save();
+            ctx.fillStyle = `hsl(${(f * 6) % 360},100%,60%)`;
+            ctx.shadowBlur = 14;
+            ctx.shadowColor = ctx.fillStyle;
+            ctx.beginPath();
+            ctx.arc(bxr, byr, r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        if (f >= 40 && f < 150) outroCaption('He takes a piece of the rainbow...');
+        else if (f >= 150) outroCaption('...and puts it in his pocket.');
+    } else if (f < 330) {
+        // ── Scene 2: flying back to Earth ──
+        const t = (f - 210) / 120;
+        ctx.fillStyle = '#020210';
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        ctx.fillStyle = '#FFF';
+        for (let i = 0; i < 120; i++) {
+            const h1 = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+            const h2 = Math.sin(i * 269.5 + 183.3) * 28001.8384;
+            ctx.globalAlpha = 0.25 + Math.abs(Math.sin(frameCount * 0.03 + i)) * 0.6;
+            ctx.fillRect((h1 - Math.floor(h1)) * CANVAS_W, (h2 - Math.floor(h2)) * CANVAS_H, 2, 2);
+        }
+        ctx.globalAlpha = 1;
+
+        // Earth grows as he approaches
+        const er = 40 + t * 100;
+        ctx.save();
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = '#66AAFF';
+        ctx.fillStyle = '#1E66C8';
+        ctx.beginPath();
+        ctx.arc(170, 470, er, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#2E9E4A';
+        ctx.beginPath();
+        ctx.ellipse(170 - er * 0.3, 470 - er * 0.35, er * 0.35, er * 0.22, 0.5, 0, Math.PI * 2);
+        ctx.ellipse(170 + er * 0.35, 470 + er * 0.1, er * 0.3, er * 0.4, -0.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // hero rockets toward it, fire trailing
+        const mcX = lerp(620, 250, t);
+        const mcY = lerp(140, 350, t);
+        ctx.save();
+        for (let i = 1; i <= 6; i++) {
+            ctx.globalAlpha = 0.5 - i * 0.07;
+            ctx.fillStyle = i % 2 === 0 ? '#FF6600' : '#FFCC00';
+            ctx.beginPath();
+            ctx.arc(mcX + 30 + i * 16, mcY + 10 - i * 9, 10 - i, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+        const mc = storyCharObj(mcX, player.shirtColor, 0.3, mcY);
+        mc.armor = player.armor;
+        mc.pepperTimer = 100;
+        drawCharacter(mc, true, 'idle');
+
+        outroCaption('Back to Earth!');
+    } else {
+        // ── Scene 3: home — the lick that cures the fire ──
+        const sky = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+        sky.addColorStop(0, '#6EC0F0');
+        sky.addColorStop(1, '#C8ECFF');
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, CANVAS_W, GROUND_Y);
+        // sun
+        ctx.save();
+        ctx.fillStyle = '#FFE066';
+        ctx.shadowBlur = 40;
+        ctx.shadowColor = '#FFD700';
+        ctx.beginPath();
+        ctx.arc(680, 90, 42, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        // grass
+        ctx.fillStyle = '#4CAF50';
+        ctx.fillRect(0, GROUND_Y, CANVAS_W, CANVAS_H - GROUND_Y);
+        ctx.fillStyle = '#3E8E41';
+        ctx.beginPath();
+        ctx.ellipse(150, GROUND_Y + 5, 200, 24, 0, Math.PI, 0);
+        ctx.ellipse(600, GROUND_Y + 8, 240, 30, 0, Math.PI, 0);
+        ctx.fill();
+
+        const stillBurning = f < 395;
+        const mc = storyCharObj(380, player.shirtColor, 0, GROUND_Y - 54);
+        mc.armor = player.armor;
+        mc.pepperTimer = stillBurning ? 80 : 0;
+        mc.headRed = stillBurning ? 0 : Math.max(0, 1 - (f - 395) / 45);
+        if (stillBurning) drawPepperFlamesBehind(mc);
+        drawCharacter(mc, false, f < 420 ? 'eating' : 'idle');
+
+        // rainbow sparkles around the lick
+        if (f >= 340 && f < 415) {
+            ctx.save();
+            for (let i = 0; i < 6; i++) {
+                const ang = f * 0.1 + i * 1.05;
+                ctx.fillStyle = `hsl(${(f * 8 + i * 60) % 360},100%,60%)`;
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = ctx.fillStyle;
+                ctx.beginPath();
+                ctx.arc(398 + Math.cos(ang) * 26, GROUND_Y - 44 + Math.sin(ang) * 18, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        if (f >= 340 && f < 415) outroCaption('*LICK* — the rainbow cures the fire!');
+        if (f >= 420) outroCaption('THE  END', true);
+    }
+
+    // skip hint
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = '13px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('SPACE to skip', CANVAS_W / 2, CANVAS_H - 16);
+    ctx.restore();
+
+    // fade in from the black transition, and out into the victory screen
+    if (f < 25) {
+        ctx.fillStyle = '#000';
+        ctx.globalAlpha = 1 - f / 25;
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        ctx.globalAlpha = 1;
+    }
+    if (f >= 455) {
+        ctx.fillStyle = '#000';
+        ctx.globalAlpha = Math.min(1, (f - 455) / 25);
         ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
         ctx.globalAlpha = 1;
     }
@@ -3013,23 +3411,39 @@ function updateLevelProgress() {
 
 function completeLevel() {
     victory = currentLevel === 10;
-    if (boss) {
-        spawnExplosion(boss.x, boss.y);
-        spawnExplosion(boss.x - 45 * BOSS_SCALE, boss.y + 25 * BOSS_SCALE);
-        spawnExplosion(boss.x + 35 * BOSS_SCALE, boss.y - 30 * BOSS_SCALE);
-        spawnExplosion(boss.x + 70 * BOSS_SCALE, boss.y);
-        playDeathSound();
-        boss = null;
-        rainbows.length = 0;
-    }
+    rainbows.length = 0;
     bankCoins();
+    if (victory) {
+        // campaign completion bonus
+        saveData.bank += 1000;
+        persistSave();
+    }
     if (currentLevel < THEMES.length && currentLevel + 1 > saveData.unlockedLevel) {
         saveData.unlockedLevel = currentLevel + 1;
         persistSave();
     }
     p1Thrusting = false;
     p2Thrusting = false;
+    p1Keys.clear();
     stopFireSound();
+    if (victory) {
+        // boss beaten: wait for a button press, fade to black, then the ending
+        // cutscene (the boss survives into it — the hero robs it of rainbow)
+        victoryWaitFrame = 0;
+        victoryFadeStart = -1;
+        gameState = STATE.VICTORY_WAIT;
+    } else {
+        gameState = STATE.COMPLETE;
+        completeTimer = 0;
+    }
+}
+
+function victoryWaitPressed() {
+    if (victoryFadeStart < 0 && victoryWaitFrame > 20) victoryFadeStart = victoryWaitFrame;
+}
+
+function finishOutro() {
+    boss = null;
     gameState = STATE.COMPLETE;
     completeTimer = 0;
 }
@@ -3136,7 +3550,7 @@ function renderFullScreenDead() {
 function drawAdminOverlay() {
     if (!adminMode) return;
     ctx.save();
-    const x = 8, y = CANVAS_H - 128, w = 210, h = 118;
+    const x = 8, y = CANVAS_H - 146, w = 210, h = 136;
     ctx.fillStyle = 'rgba(0,0,0,0.75)';
     roundRect(ctx, x, y, w, h, 8);
     ctx.fill();
@@ -3158,10 +3572,12 @@ function drawAdminOverlay() {
     ctx.fillText('[3]  Spawn Chili Pepper', x + 10, y + 78);
     ctx.fillStyle = '#FFD700';
     ctx.fillText('[G]  ∞ coins + ∞ hearts + unlock all', x + 10, y + 96);
+    ctx.fillStyle = '#88DDFF';
+    ctx.fillText("[,] slower  [.] faster  ['] normal", x + 10, y + 114);
 
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
     ctx.font = '11px Arial';
-    ctx.fillText('Press F to close', x + 10, y + 114);
+    ctx.fillText('Press F to close', x + 10, y + 132);
     ctx.restore();
 }
 
@@ -3483,6 +3899,7 @@ const STEP_MS = 1000 / 60;
 const MAX_FRAME_MS = 250; // cap catch-up after a background-tab pause
 let lastTime = performance.now();
 let stepAccumulator = 0;
+let timeScale = 1; // testing-mode time control (, slower / . faster / ' normal)
 
 function update() {
     frameCount++;
@@ -3491,6 +3908,16 @@ function update() {
         menuScrollOffset = (menuScrollOffset + 2.5) % (CANVAS_W * 4);
     } else if (gameState === STATE.STORY) {
         updateStory();
+    } else if (gameState === STATE.VICTORY_WAIT) {
+        victoryWaitFrame++;
+        if (boss) boss.wingT += 0.12; // the fish keeps hovering behind the banner
+        particles = particles.filter(p => { p.update(); return !p.dead; });
+        if (victoryFadeStart >= 0 && victoryWaitFrame - victoryFadeStart > 50) {
+            outroFrame = 0;
+            gameState = STATE.OUTRO;
+        }
+    } else if (gameState === STATE.OUTRO) {
+        updateOutro();
     } else if (gameState === STATE.INTRO) {
         updateIntro();
     } else if (gameState === STATE.PLAYING) {
@@ -3571,6 +3998,12 @@ function render() {
     } else if (gameState === STATE.STORY) {
         drawStory();
         drawMusicPrompt();
+    } else if (gameState === STATE.VICTORY_WAIT) {
+        drawVictoryWait();
+        drawMusicPrompt();
+    } else if (gameState === STATE.OUTRO) {
+        drawOutro();
+        drawMusicPrompt();
     } else if (gameState === STATE.INTRO) {
         drawIntro();
         drawMusicPrompt();
@@ -3591,7 +4024,7 @@ function render() {
 }
 
 function loop(now) {
-    stepAccumulator += Math.min(MAX_FRAME_MS, now - lastTime);
+    stepAccumulator += Math.min(MAX_FRAME_MS, now - lastTime) * timeScale;
     lastTime = now;
     while (stepAccumulator >= STEP_MS) {
         update();
