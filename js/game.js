@@ -93,7 +93,7 @@ function playCoinSound() {
 // ─── Save Data (coin bank, level unlocks, outfits) ───────────────────────────
 const SAVE_KEY = 'spicyRideSave';
 let saveData = { bank: 0, unlockedLevel: 1, outfits: ['classic'], equipped: 'classic' };
-let testingMode = false; // G key: infinite coins + all levels; nothing persists
+let testingMode = false; // Enabled explicitly in the G event director; nothing persists
 
 function loadSave() {
     try {
@@ -233,12 +233,7 @@ function updateFireSound() {
 }
 
 window.addEventListener('keydown', e => {
-    if (e.code === 'KeyG') {
-        // testing mode: infinite coins + all levels unlocked, progress not saved
-        testingMode = true;
-        saveData.bank = 999999;
-        saveData.unlockedLevel = 10;
-    }
+    if (handleExpansionKey(e)) return;
     if (testingMode) {
         // time controls: , = 2x slower   . = 2x faster   ' = normal
         if (e.code === 'Comma') timeScale = Math.max(0.25, timeScale / 2);
@@ -359,6 +354,7 @@ window.addEventListener('keydown', e => {
     }
 });
 window.addEventListener('keyup', e => {
+    secretKeys.delete(e.code);
     if (p1Keys.delete(e.code) && p1Keys.size === 0) { p1Thrusting = false; updateFireSound(); }
     if (e.code === 'ArrowUp') { p2Thrusting = false; updateFireSound(); }
 });
@@ -2038,7 +2034,7 @@ function updateCoins() {
                 const dy = coins[i].y - (pl.y + pl.height / 2);
                 if (Math.sqrt(dx * dx + dy * dy) < 24) {
                     coins[i].collected = true;
-                    pl.coinScore++;
+                    collectRunCoin(pl);
                     playCoinSound();
                     for (let s = 0; s < 6; s++) {
                         const ang = Math.random() * Math.PI * 2;
@@ -2581,7 +2577,7 @@ function drawRainbows() {
 }
 
 function drawBoss() {
-    if (!boss) return;
+    if (!boss || secretActive) return;
     const flap = Math.sin(boss.wingT) * 0.5;
     const charging = boss.chargeTimer > 0;
     ctx.save();
@@ -2743,7 +2739,7 @@ function checkCollisions() {
 }
 
 function killPlayerObj(pl) {
-    if (!pl.alive) return;
+    if (!pl.alive || secretActive) return;
     pl.alive = false;
     if (!testingMode) pl.lives--; // G testing mode: infinite hearts
     if (pl === player) { p1Thrusting = false; p1Keys.clear(); }
@@ -2876,13 +2872,13 @@ function drawLevelHUD() {
     if (currentLevel <= 0) return;
     ctx.save();
     ctx.textAlign = 'center';
-    const secs = Math.max(0, Math.ceil(levelTimeLeft / 60));
+    const secs = Math.max(0, Math.ceil((secretActive ? secretFrames : levelTimeLeft) / 60));
     const mm = Math.floor(secs / 60), ss = ('0' + (secs % 60)).slice(-2);
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(CANVAS_W / 2 - 66, 34, 132, 44);
     ctx.fillStyle = '#FFAA00';
     ctx.font = 'bold 11px Arial';
-    ctx.fillText(`LEVEL ${currentLevel} — ${theme().name}`, CANVAS_W / 2, 48);
+    ctx.fillText(secretActive ? 'SECRET VAULT — COIN HEAVEN' : `LEVEL ${currentLevel} — ${theme().name}`, CANVAS_W / 2, 48);
     ctx.fillStyle = '#FFDD55';
     ctx.font = 'bold 20px Arial';
     ctx.fillText(`${mm}:${ss}`, CANVAS_W / 2, 70);
@@ -3606,6 +3602,7 @@ function startGame() {
         pl.lives = diff.lives;
         pl.maxLives = diff.lives;
     }
+    resetRunExtras();
     levelTimeLeft = levelDuration;
     victory = false;
     paused = false;
@@ -3723,12 +3720,18 @@ function startIntro() {
 function bankCoins() {
     const mult = DIFFICULTIES[difficultyIdx].coinMult;
     const runCoins = player.coinScore + (playerCount === 2 ? player2.coinScore : 0);
-    lastBanked = Math.round(runCoins * mult);
+    const earned = Math.round((runCoins - secretEarned) * mult) + secretEarned;
+    lastBanked = Math.max(0, earned - runBanked);
+    runBanked += lastBanked;
     saveData.bank += lastBanked;
     persistSave();
 }
 
 function updateLevelProgress() {
+    if (secretActive) {
+        if (--secretFrames <= 0) { secretActive = false; completeLevel(); }
+        return;
+    }
     levelTimeLeft--;
     const elapsed = levelDuration - levelTimeLeft;
     // boss arrives halfway through level 10 (2:30 of 5:00)
@@ -3951,7 +3954,7 @@ function drawAdminOverlay() {
     ctx.fillStyle = '#FF2200';
     ctx.fillText('[3]  Spawn Chili Pepper', x + 10, y + 78);
     ctx.fillStyle = '#FFD700';
-    ctx.fillText('[G]  ∞ coins + ∞ hearts + unlock all', x + 10, y + 96);
+    ctx.fillText('[G]  Events + testing controls', x + 10, y + 96);
     ctx.fillStyle = '#88DDFF';
     ctx.fillText("[,] slower  [.] faster  ['] normal", x + 10, y + 114);
 
@@ -4280,6 +4283,7 @@ function update() {
     } else if (gameState === STATE.INTRO) {
         updateIntro();
     } else if (gameState === STATE.PLAYING && !paused) {
+        updateRunExtras();
         // scroll (speed ramps up but caps, so long campaign levels stay fair)
         scrollOffset += scrollSpeed;
         scrollSpeed = Math.min(scrollSpeed + 0.0015, SCROLL_SPEED_BASE + 5);
@@ -4299,7 +4303,7 @@ function update() {
         nextObstacleIn--;
         if (nextObstacleIn <= 0) {
             const rand = Math.random();
-            if (rand < 0.55) spawnObstacle();
+            if (rand < 0.55 && activeEvent !== "coins" && !secretActive) spawnObstacle();
             else spawnCoins();
             nextObstacleIn = 80 + Math.floor(Math.random() * 120);
         }
@@ -4328,10 +4332,12 @@ function update() {
         updateRamens();
         updateSauces();
         updatePeppers();
-        updateWeather();
-        if (boss) updateBoss();
-        updateRainbows();
-        checkCollisions();
+        if (!secretActive && activeEvent !== "coins") {
+            updateWeather();
+            if (boss) updateBoss();
+            updateRainbows();
+            checkCollisions();
+        }
 
         particles = particles.filter(p => { p.update(); return !p.dead; });
         hudPromptAlpha = Math.max(0, hudPromptAlpha - 0.005);
@@ -4381,6 +4387,7 @@ function render() {
         drawMusicPrompt();
     }
     drawTestingBadge();
+    renderRunExtras();
 }
 
 function loop(now) {
@@ -4416,3 +4423,135 @@ function loop(now) {
 loadSave();
 applyDisplaySize();
 requestAnimationFrame(loop);
+
+// Run challenges, wall-clock events, and the hidden coin vault.
+let reviveHearts = 0, runFrames = 0, runBanked = 0;
+let taskDone = [false, false, false];
+let secretActive = false, secretUsed = false, secretFrames = 0, secretEarned = 0;
+const secretKeys = new Set();
+let activeEvent = 'normal', eventOverride = null;
+let eventSettings = { start: 12, interval: 4, duration: 1 };
+try {
+    const saved = JSON.parse(localStorage.getItem('spicyEvents'));
+    if (saved && Number.isInteger(saved.start) && saved.start >= 0 && saved.start <= 23 &&
+        Number.isInteger(saved.interval) && saved.interval >= 1 && saved.interval <= 12 &&
+        Number.isInteger(saved.duration) && saved.duration >= 1 && saved.duration <= saved.interval) eventSettings = saved;
+} catch (_) { /* defaults also work when storage is disabled */ }
+const eventNames = { normal: 'Normal ride', coins: 'Coin shower', double: 'Double coins', spice: 'Endless spice' };
+const extras = document.createElement('section');
+extras.id = 'runExtras';
+extras.innerHTML = `<div id="eventStatus"></div><aside id="challengeCard" aria-label="Run challenges">
+    <small>EXTRA LIFE / RUN CHALLENGES</small><h2>Keep the ride alive <span id="heartCount"></span></h2>
+    <div id="taskRows"></div><button id="reviveButton" type="button">Use a heart · R</button>
+    <p id="runMessage" role="status"></p></aside>
+    <dialog id="eventDialog"><form id="eventForm"><small>SPICY RIDE / CONTROL ROOM</small><h2>Event director</h2>
+    <p>Local clock schedule. Normal play starts at the anchor; the first event starts one interval later.</p>
+    <label>Normal-play anchor hour <input name="start" type="number" min="0" max="23" required></label>
+    <label>Event every (hours) <input name="interval" type="number" min="1" max="12" required></label>
+    <label>Event length (hours) <input name="duration" type="number" min="1" max="12" required></label>
+    <label>Preview <select id="eventPreview"><option value="">Follow schedule</option><option value="normal">Normal ride</option><option value="coins">Coin shower</option><option value="double">Double coins</option><option value="spice">Endless spice</option></select></label>
+    <p>Coin shower removes hazards. Double coins doubles pickups. Endless spice keeps your fuel full.</p>
+    <button type="submit">Save schedule</button><button id="enableTesting" type="button">Enable testing cheats</button><button id="closeEvents" type="button">Back to game · G</button>
+    <p id="eventFeedback" role="status"></p></form></dialog>`;
+document.body.appendChild(extras);
+const $extra = id => document.getElementById(id);
+const eventDialog = $extra('eventDialog');
+let directorPaused = false;
+function closeEventDirector() {
+    eventDialog.close();
+    if (directorPaused) resumeGame();
+    directorPaused = false;
+}
+function openEventDirector() {
+    directorPaused = gameState === STATE.PLAYING && !paused;
+    if (directorPaused) pauseGame();
+    for (const key of ['start', 'interval', 'duration']) $extra('eventForm').elements[key].value = eventSettings[key];
+    eventDialog.showModal();
+}
+$extra('closeEvents').onclick = closeEventDirector;
+eventDialog.addEventListener('cancel', e => { e.preventDefault(); closeEventDirector(); });
+$extra('eventPreview').onchange = e => { eventOverride = e.target.value || null; };
+$extra('eventForm').onsubmit = e => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const next = Object.fromEntries(['start', 'interval', 'duration'].map(k => [k, Number(form.elements[k].value)]));
+    if (next.duration > next.interval) { $extra('eventFeedback').textContent = 'Event length must not exceed the interval.'; return; }
+    eventSettings = next;
+    try { localStorage.setItem('spicyEvents', JSON.stringify(next)); } catch (_) {}
+    $extra('eventFeedback').textContent = 'Schedule saved. Preview overrides last until you reload or choose Follow schedule.';
+};
+$extra('enableTesting').onclick = () => {
+    testingMode = true; saveData.bank = 999999; saveData.unlockedLevel = 10;
+    $extra('eventFeedback').textContent = 'Testing enabled: infinite lives, all levels. Progress will not be saved.';
+};
+$extra('reviveButton').onclick = reviveRunPlayer;
+function scheduledEvent(now = new Date()) {
+    const anchor = new Date(now); anchor.setHours(eventSettings.start, 0, 0, 0);
+    if (now < anchor) anchor.setDate(anchor.getDate() - 1);
+    const hours = (now - anchor) / 3600000;
+    const slot = Math.floor(hours / eventSettings.interval);
+    if (slot === 0 || hours % eventSettings.interval >= eventSettings.duration) return 'normal';
+    // A seeded selection keeps an event stable across reloads in the same slot.
+    const seed = Math.floor(anchor.getTime() / 3600000) + slot * 2654435761;
+    return ['coins', 'double', 'spice'][((Math.imul(seed ^ (seed >>> 16), 2246822519) >>> 0) % 3)];
+}
+function resetRunExtras() {
+    reviveHearts = 0; runFrames = 0; runBanked = 0; taskDone = [false, false, false];
+    secretActive = false; secretUsed = false; secretFrames = 0; secretEarned = 0; secretKeys.clear();
+}
+function reviveRunPlayer() {
+    if (!reviveHearts || ![STATE.PLAYING, STATE.DEAD].includes(gameState) || paused) return;
+    const pl = [player, ...(playerCount === 2 ? [player2] : [])].find(p => p.permanentlyDead);
+    if (!pl) return;
+    reviveHearts--; pl.permanentlyDead = false; pl.lives = 1; respawnPlayerObj(pl);
+    pl.invincibleTimer = 180; gameState = STATE.PLAYING; tryStartMusic();
+}
+function handleExpansionKey(e) {
+    if (e.code === 'KeyG' && !e.repeat) {
+        e.preventDefault(); eventDialog.open ? closeEventDirector() : openEventDirector(); return true;
+    }
+    if (eventDialog.open) return true;
+    if (e.code === 'KeyR' && !e.repeat) { reviveRunPlayer(); return true; }
+    if (e.code === 'KeyK' || e.code === 'KeyF') {
+        secretKeys.add(e.code);
+        if (gameState === STATE.PLAYING && !paused && currentLevel === 10 && boss &&
+            levelTimeLeft > 0 && levelTimeLeft <= 300 && !secretUsed && secretKeys.has('KeyK') && secretKeys.has('KeyF')) {
+            secretUsed = secretActive = true; secretFrames = 3600; adminMode = false;
+            obstacles.length = rainbows.length = weather.length = coins.length = 0;
+            return true;
+        }
+    }
+    return false;
+}
+window.addEventListener('blur', () => secretKeys.clear());
+function collectRunCoin(pl) {
+    if (secretActive) {
+        const amount = Math.min(100, 10000 - secretEarned);
+        secretEarned += amount; pl.coinScore += amount;
+    } else pl.coinScore += activeEvent === 'double' ? 2 : 1;
+}
+function updateRunExtras() {
+    runFrames++;
+    activeEvent = eventOverride || scheduledEvent();
+    if (activeEvent === 'coins' || secretActive) obstacles.length = rainbows.length = weather.length = 0;
+    if (activeEvent === 'spice' || secretActive) { player.spice = 100; player2.spice = 100; }
+    if ((secretActive && runFrames % 12 === 0) || (activeEvent === 'coins' && runFrames % 30 === 0)) spawnCoins();
+    const total = player.coinScore + (playerCount === 2 ? player2.coinScore : 0) - secretEarned;
+    const values = [Math.floor(runFrames / 60), total, distanceScore];
+    [30, 20, 100].forEach((goal, i) => { if (!taskDone[i] && values[i] >= goal) { taskDone[i] = true; reviveHearts++; } });
+}
+let extrasMarkup = '';
+function renderRunExtras() {
+    const visible = gameState === STATE.PLAYING || gameState === STATE.DEAD;
+    $extra('challengeCard').hidden = !visible;
+    extras.classList.toggle('vault-active', secretActive);
+    $extra('eventStatus').textContent = secretActive ? `SECRET VAULT · ${Math.ceil(secretFrames / 60)}s · ${secretEarned.toLocaleString()} / 10,000` : `${eventNames[eventOverride || scheduledEvent()]} · G: event director`;
+    if (!visible) return;
+    $extra('heartCount').textContent = `♥ ${reviveHearts}`;
+    const values = [Math.floor(runFrames / 60), player.coinScore + (playerCount === 2 ? player2.coinScore : 0) - secretEarned, distanceScore];
+    const goals = [30, 20, 100], labels = ['Ride for 30 seconds', 'Collect 20 coins', 'Travel 100 distance'];
+    const markup = labels.map((label, i) => `<div class="task-row"><span>${taskDone[i] ? '✓' : '○'} ${label}</span><b>${taskDone[i] ? '+1 ♥' : Math.min(values[i], goals[i]) + '/' + goals[i]}</b><progress max="${goals[i]}" value="${values[i]}"></progress></div>`).join('');
+    if (markup !== extrasMarkup) { $extra('taskRows').innerHTML = markup; extrasMarkup = markup; }
+    $extra('reviveButton').hidden = !reviveHearts || ![player, ...(playerCount === 2 ? [player2] : [])].some(p => p.permanentlyDead);
+    $extra('runMessage').textContent = secretActive ? 'Every coin is worth 100. Fill your pockets!' : 'Each challenge earns one revive. Hearts reset each run.';
+}
