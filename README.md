@@ -1,76 +1,57 @@
-# Spicy Ride - HTML/JS Game
+# Spicy Ride
 
-A fast-paced dodging game built with vanilla HTML, CSS, and JavaScript.
+A vanilla JavaScript jetpack game with ten campaign levels, a rainbow fish boss, endless play, outfits, and local two-player play.
 
-## Project Structure
+Open `index.html` in a browser. No build or runtime dependencies are needed.
 
--
+## New: run challenges and revives
 
-```
-spicy ride. beta/
-├── index.html          # Main game HTML file
-├── css/
-│   └── style.css       # Game styling
-├── js/
-│   └── game.js         # Game logic and mechanics
-└── README.md           # This file
-```
+The bottom-left card tracks three shared challenges per run:
 
-## Features
+- Ride for 30 seconds of active game time.
+- Collect 20 coins (secret-vault coins excluded).
+- Travel 100 distance units.
 
-- **Responsive Canvas-based Game**: Uses HTML5 Canvas for smooth gameplay
-- **Dynamic Difficulty**: Game speed increases as your score goes up
-- **Keyboard Controls**: Use Arrow Keys or A/D to move left and right
-- **Collision Detection**: Avoid falling enemies to keep playing
-- **Score System**: Earn points for each enemy that passes you
-- **Game Over Screen**: Displays final score with option to restart
+Each awards one reserve heart automatically, once per run. When a player runs out of regular lives, press **R** or click **Use a heart**. In co-op, the first eliminated player receives the revive. Revives restore one life and grant three seconds of protection; score, level time and challenge progress stay intact. Unspent reserve hearts expire when a new run starts. Coins already banked at game over cannot be banked twice after reviving.
 
-## How to Play
+## New: scheduled events
 
-1. Open `index.html` in a web browser
-2. Use **Arrow Keys** (← →) or **A/D** to move your character
-3. Avoid the falling enemies (cyan squares)
-4. Score points for each enemy you dodge
-5. The game gets faster as your score increases
-6. When hit, press **SPACE** to restart
+Press **G** to open the Event director. Opening it during gameplay pauses the run. Configure the local-clock anchor, interval, and duration; settings are saved in this browser.
+
+Default interpretation of the original brief: noon–4 pm is normal play, then one-hour events begin at 4 pm, 8 pm, midnight, 4 am, and 8 am. Normal play resumes between events. The cycle restarts at noon. You can choose an interval of one hour for back-to-back hourly events.
+
+Event types:
+
+- **Coin shower:** frequent coin formations, no damaging obstacles or boss attacks. Fuel still matters.
+- **Double coins:** pickups are worth two coins.
+- **Endless spice:** continuously replenished flight fuel.
+
+The event selection is seeded by its clock slot, so reloading does not reroll it. Scheduling uses the device's local clock, not a multiplayer server. Preview overrides are temporary; choose Follow schedule to return to automatic events. Existing obstacles are cleared when a coin shower begins.
+
+G no longer immediately enables cheats. The explicit **Enable testing cheats** button retains infinite lives, unlocked levels, and the test coin bank. Test progress does not persist; reload to leave testing mode. Existing F admin controls remain available. In testing mode, comma slows time, period speeds it up, and apostrophe restores normal speed.
+
+## New: secret vault (spoiler)
+
+During the final **five seconds** of the level 10 boss fight, hold **K + F** together, in either order. This opens a 60-second bonus stage with dense coin formations, unlimited fuel, and no damage. Each pickup is worth 100 coins, capped at **10,000 total across both players**. Difficulty does not multiply this bonus. The countdown pauses with gameplay and follows the game's existing simulation speed. Afterward, the normal campaign victory sequence continues and the usual campaign bonus is awarded separately.
 
 ## Controls
 
-| Key | Action |
-|-----|--------|
-| ← / A | Move Left |
-| → / D | Move Right |
-| SPACE | Restart (on Game Over) |
+- Menus: arrows and Enter; Escape goes back.
+- Player 1: hold W to fly; in solo play Up or Space also works.
+- Player 2: hold Up to fly.
+- Escape: pause.
+- R: spend a reserve revive heart.
+- G: event director and explicit testing controls.
+- F: existing item-spawn admin panel.
 
-## Game Mechanics
+## Regression checks
 
-- **Player**: Red square controlled by the player
-- **Enemies**: Cyan squares that fall from the top
-- **Score**: Increments each time an enemy passes the bottom
-- **Speed**: Increases gradually with score (formula: 2 + score/10)
-- **Spawn Rate**: Enemies spawn at a ~2% chance each frame
+Install Playwright as a development tool, then run:
 
-## Browser Compatibility
+```sh
+npm install --no-save playwright
+npx playwright install chromium
+node tests/features.cjs
+```
 
-Works on all modern browsers that support:
-- HTML5 Canvas
-- ES6 JavaScript
-- CSS3
-
-## Future Enhancements
-
-- Add sound effects
-- Power-ups system
-- Multiple difficulty levels
-- High score leaderboard
-- Mobile touch controls
-- Different enemy types
-- Visual effects and animations
-
-## Installation
-
-Simply download or clone the project and open `index.html` in your browser. No build process or dependencies required!
-
----
-
-Built with vanilla JavaScript - no frameworks needed! 🎮
+The browser test covers event boundaries, one-time challenge rewards, solo/co-op revives, incremental coin banking, secret activation boundaries, bonus caps, victory transition, event effects, and pause behavior. It also generates desktop and mobile previews in `test-results/`. These checks manipulate game state to reach boundary conditions; manual playtesting is still useful for balancing.

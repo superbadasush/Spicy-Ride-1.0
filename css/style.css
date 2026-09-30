@@ -31,3 +31,27 @@ h1 {
     color: white;
     margin-bottom: 20px;
 }
+
+#runExtras { color: #fff3e8; font-size: 13px; }
+#eventStatus { position: fixed; top: 12px; right: 16px; background: #24150fee; border: 1px solid #ff8b3d; border-radius: 20px; padding: 9px 16px; pointer-events: none; }
+#challengeCard { position: fixed; bottom: 16px; left: 16px; width: 290px; padding: 16px; border: 1px solid #a34e28; border-radius: 16px; background: #1d1213ed; box-shadow: 0 10px 40px #0008; }
+#runExtras small { color: #ffad65; font-size: 10px; letter-spacing: 1.5px; }
+#runExtras h2 { font-size: 17px; margin: 8px 0 14px; }
+#heartCount { color: #ff7287; float: right; }
+.task-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 5px; margin: 11px 0; }
+.task-row b { color: #ffbd79; }
+.task-row progress { width: 100%; height: 4px; accent-color: #ff853c; }
+#runExtras p { color: #cfb9ac; font-size: 12px; line-height: 1.5; margin: 10px 0 0; }
+#runExtras button { color: #fff5eb; background: #883416; border: 1px solid #ed884c; border-radius: 8px; padding: 9px 12px; cursor: pointer; margin-top: 8px; }
+#runExtras button:hover { background: #b54920; }
+#runExtras :focus-visible { outline: 3px solid #ffd080; outline-offset: 3px; }
+#eventDialog { margin: auto; width: min(440px, 94vw); max-height: 90vh; overflow: auto; padding: 26px; color: #fff3e8; background: #201415; border: 1px solid #ff853c; border-radius: 18px; }
+#eventDialog::backdrop { background: #080408bb; }
+#eventDialog label { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 15px 0; }
+#eventDialog input, #eventDialog select { padding: 8px; color: white; background: #392526; border: 1px solid #9e6c53; border-radius: 6px; max-width: 165px; }
+#eventDialog input { width: 72px; }
+[hidden] { display: none !important; }
+@media (max-width: 700px), (max-height: 650px) { #challengeCard { width: 235px; padding: 10px; bottom: 5px; left: 5px; font-size: 11px; } #runExtras h2 { font-size: 14px; margin: 5px 0; } .task-row { margin: 6px 0; } #eventStatus { top: 5px; right: 5px; font-size: 10px; } }
+.vault-active #eventStatus { color: #ffe08a; border-color: #ffde73; box-shadow: 0 0 35px #ffbc3866; }
+#eventStatus { top: auto; bottom: 16px; }
+@media (max-width: 700px) { #challengeCard { width: 190px; } #eventStatus { bottom: auto; top: 8px; } }
